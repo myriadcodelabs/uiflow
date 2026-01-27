@@ -30,28 +30,6 @@ type CardWithState = {
 
 const studiedCounter = createFlowChannel<number>(0);
 
-const CardView: React.FC<{
-  input: { cards: CardWithState[] };
-  output: { emit: (value: { cardId: string; action: "flip" | "rate" | "next"; rating?: CardWithState["rating"] }) => void };
-}> = ({ input, output }) => (
-  <div>
-    {input.cards.map((card) => (
-      <div key={card.id}>
-        <div>{card.question}</div>
-        {card.flipped ? <div>{card.answer}</div> : null}
-        <button onClick={() => output.emit({ cardId: card.id, action: "flip" })}>Show Answer</button>
-        <button onClick={() => output.emit({ cardId: card.id, action: "rate", rating: "easy" })}>Easy</button>
-        <button onClick={() => output.emit({ cardId: card.id, action: "rate", rating: "medium" })}>Medium</button>
-        <button onClick={() => output.emit({ cardId: card.id, action: "rate", rating: "hard" })}>Hard</button>
-        <button onClick={() => output.emit({ cardId: card.id, action: "next" })}>Next</button>
-      </div>
-    ))}
-  </div>
-);
-
-const NoCardView: React.FC<{ input: {}; output: { emit: () => void } }> = () => (
-  <div>No cards available.</div>
-);
 
 const studyFlow = defineFlow<StudyData>(
   {
@@ -120,7 +98,37 @@ const studyFlow = defineFlow<StudyData>(
   },
   { start: "fetchCards" }
 );
+```
 
+The example components are defined here.
+
+```tsx
+const CardView: React.FC<{
+  input: { cards: CardWithState[] };
+  output: { emit: (value: { cardId: string; action: "flip" | "rate" | "next"; rating?: CardWithState["rating"] }) => void };
+}> = ({ input, output }) => (
+  <div>
+    {input.cards.map((card) => (
+      <div key={card.id}>
+        <div>{card.question}</div>
+        {card.flipped ? <div>{card.answer}</div> : null}
+        <button onClick={() => output.emit({ cardId: card.id, action: "flip" })}>Show Answer</button>
+        <button onClick={() => output.emit({ cardId: card.id, action: "rate", rating: "easy" })}>Easy</button>
+        <button onClick={() => output.emit({ cardId: card.id, action: "rate", rating: "medium" })}>Medium</button>
+        <button onClick={() => output.emit({ cardId: card.id, action: "rate", rating: "hard" })}>Hard</button>
+        <button onClick={() => output.emit({ cardId: card.id, action: "next" })}>Next</button>
+      </div>
+    ))}
+  </div>
+);
+
+const NoCardView: React.FC<{ input: {}; output: { emit: () => void } }> = () => (
+  <div>No cards available.</div>
+);
+```
+The FlowRunner is used to call the flow and set initial data and channels.
+
+```tsx
 export function App() {
   return (
     <FlowRunner
