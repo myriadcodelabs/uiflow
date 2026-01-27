@@ -1,0 +1,396 @@
+You are generating React + TypeScript code that MUST use the **@myriadcodelabs/uiflow** library to orchestrate multi-step UI.
+
+Your output should be production-ready code (no pseudocode), compile without type errors, and follow the API + constraints below.
+
+---
+
+# UIFlow: What it is
+
+UIFlow is a small, code-first flow runner for React. You define a flow as a plain object with named steps. Steps can be:
+- **Action steps** (logic/async; no UI)
+- **UI steps** (render a component; component emits outputs)
+
+Transitions happen when a step’s `onOutput(...)` returns the **next step name** (a string key in the steps object). Returning `void` means “stay / just re-render”.
+
+---
+
+# Imports (required)
+
+Always import from the package root:
+
+```ts
+import { FlowRunner, defineFlow, createFlowChannel, OutputHandle } from "@myriadcodelabs/uiflow";
+```
+
+Do NOT import from internal paths like `@myriadcodelabs/uiflow/dist/*` or `@myriadcodelabs/uiflow/src/*`.
+
+---
+
+# Public API surface (from `src/flow.tsx`)
+
+## Channels (cross-flow / shared events)
+
+```ts
+export type Updater<T> = T | ((prev: T) => T);
+
+export interface FlowChannel<T> {
+  get: () => T;
+  emit: (update: Updater<T>) => void;
+  subscribe: (listener: () => void) => () => void;
+}
+
+export type EventChannels = Record<string, FlowChannel<any>>;
+
+export function createFlowChannel<T>(initial: T): FlowChannel<T>;
+```
+
+Notes:
+- `createFlowChannel` is NOT tied to React; create channels outside components so multiple flows can share them.
+- When any channel emits, `FlowRunner` re-renders (it subscribes to all provided channels).
+
+## Flow types
+
+```ts
+export type FlowData = Record<string, any>;
+
+export interface OutputHandle<O = any> {
+  emit: (output: O) => void;
+}
+// Note: the method name is `emit(...)` (not `done(...)`).
+
+export interface UiStep<D extends FlowData = FlowData, I = any, O = any> {
+  input: (data: D, events?: EventChannels) => I;
+  view: React.ComponentType<{ input: I; output: OutputHandle<O> }>;
+  onOutput: (data: D, output: O, events?: EventChannels) => string | void | Promise<string | void>;
+}
+
+export interface ActionStep<D extends FlowData = FlowData, I = any, O = any> {
+  input: (data: D, events?: EventChannels) => I;
+  action: (input: I, data: D, events?: EventChannels) => O | Promise<O>;
+  onOutput: (data: D, output: O, events?: EventChannels) => string | void | Promise<string | void>;
+}
+
+export type FlowStep<D extends FlowData = FlowData> = UiStep<D, any, any> | ActionStep<D, any, any>;
+export type FlowSteps<D extends FlowData = FlowData> = Record<string, FlowStep<D>>;
+
+export interface FlowDefinition<D extends FlowData = FlowData> {
+  steps: FlowSteps<D>;
+  start: string;
+}
+
+export interface DefineFlowOptions {
+  start: string;
+}
+
+export function defineFlow<D extends FlowData = FlowData>(
+  steps: FlowSteps<D>,
+  options: DefineFlowOptions
+): FlowDefinition<D>;
+```
+
+## Runner
+
+```ts
+export interface FlowRunnerProps<D extends FlowData = FlowData> {
+  flow: FlowDefinition<D>;
+  initialData: D;
+  eventChannels?: EventChannels;
+}
+
+export function FlowRunner<D extends FlowData = FlowData>(
+  props: Readonly<FlowRunnerProps<D>>
+): JSX.Element;
+```
+
+Runner semantics you must respect:
+- **Action step detection:** a step is treated as an action step when it has `.action` AND does NOT have `.view`.
+- Action steps run automatically when they become current (inside an effect).
+- UI steps render `view`, and the component must call `output.emit(...)` to produce an output. This triggers `onOutput`.
+- `data` is shared mutable state. Step handlers are allowed to mutate it.
+
+---
+
+# Constraints (must-follow)
+
+1) **No missing transitions**
+   - Every returned next step name MUST exist as a key in the `steps` object.
+   - The `start` option MUST reference an existing step key.
+
+2) **Step shape is exclusive**
+   - UI step: must have `view`, must NOT have `action`.
+   - Action step: must have `action`, must NOT have `view`.
+
+3) **Typed outputs**
+   - Define a discriminated union for UI outputs (e.g. `{ action: "flip" | "rate" | ...; ... }`).
+   - The UI component’s `output` prop MUST be `OutputHandle<YourOutputType>`.
+
+4) **Views are dumb; flow owns state**
+   - Views should only render from `input` and emit user intent via `output.emit(...)`.
+   - Do not put flow-transition logic in the view; keep it in the flow step’s `onOutput`.
+
+5) **Event channels are optional**
+   - All step functions accept `events?: EventChannels`. Always guard access via `events?.channelName`.
+   - When you need shared cross-flow state, create channels via `createFlowChannel` and pass them to `FlowRunner` as `eventChannels={{ ... }}`.
+   - Treat `eventChannels` as immutable after mount (UIFlow captures it once); create it once and reuse the same object reference.
+
+6) **React/Next.js compatibility**
+   - If you generate a Next.js client component for a view, include `"use client"` at the top of that file.
+
+7) **Deliverables format**
+   - Output only the code files needed (imports included), with clear filenames/paths if the user asks for multiple files.
+   - Avoid placeholders like `TODO`, `fakeFetch`, or `any` unless the user explicitly allows it.
+
+---
+
+# Reference example (flow definition)
+
+Use this style when generating flows (typed data, typed output, helper ops, co-located state):
+
+```ts
+import { defineFlow } from "@myriadcodelabs/uiflow";
+import fetchFlashCardsListAction from "../_server_actions/fetchFlashCardsListAction";
+import { FlashCard } from "@/lib/types/responses/FlashCard";
+import FlashCardView from "../_client_components/FlashCardView";
+import { ShowCardOutput } from "../_client_components/FlashCardActions";
+import { Rating } from "@/lib/types/Rating";
+import { reviewStudiedCard } from "@/lib/clientbackendApiCalls";
+import NoCardUI from "../_client_components/NoCardUI";
+
+interface StudyFlashCardData {
+  deckId: string;
+  flowData: FlowDataHolder;
+}
+
+// Co-located: card and its state together
+interface CardWithState {
+  card: FlashCard;
+  flipped: boolean;
+  rating: Rating | null;
+}
+
+interface FlowDataHolder {
+  // Co-located state: cards with their metadata together
+  cards: CardWithState[];
+  // Track which card is currently being acted upon
+  activeCardId: string | null;
+}
+
+// Helper operations for card state management
+const CardOps = {
+  // Get card state by ID
+  getCard: (data: FlowDataHolder, cardId: string): CardWithState | undefined => {
+    return data.cards.find((c) => c.card.id === cardId);
+  },
+
+  // Get active card
+  getActiveCard: (data: FlowDataHolder): CardWithState | undefined => {
+    if (!data.activeCardId) return undefined;
+    return CardOps.getCard(data, data.activeCardId);
+  },
+
+  // Set card flipped state
+  setFlipped: (data: FlowDataHolder, cardId: string, flipped: boolean): void => {
+    const cardWithState = CardOps.getCard(data, cardId);
+    if (cardWithState) {
+      cardWithState.flipped = flipped;
+    }
+  },
+
+  // Set card rating
+  setRating: (data: FlowDataHolder, cardId: string, rating: Rating): void => {
+    const cardWithState = CardOps.getCard(data, cardId);
+    if (cardWithState) {
+      cardWithState.rating = rating;
+    }
+  },
+
+  // Initialize cards from FlashCard array
+  initializeCards: (cards: FlashCard[]): CardWithState[] => {
+    return cards.map((card) => ({
+      card,
+      flipped: false,
+      rating: null,
+    }));
+  },
+
+  // Get cards ready for display (with disabled state)
+  getCardsForDisplay: (data: FlowDataHolder) => {
+    return data.cards.map((cardWithState) => ({
+      card: cardWithState.card,
+      flipped: cardWithState.flipped,
+      disabled: data.activeCardId !== null && data.activeCardId !== cardWithState.card.id,
+    }));
+  },
+};
+
+export const studyFlashCard = defineFlow<StudyFlashCardData>(
+  {
+    fetchCardsData: {
+      input: (data) => ({ deckId: data.deckId }),
+      action: async ({ deckId }, data) => {
+        const cards = await fetchFlashCardsListAction(deckId);
+        data.flowData.cards = cards && cards.length > 0 ? CardOps.initializeCards(cards) : [];
+        data.flowData.activeCardId = null;
+        return { ok: true };
+      },
+      onOutput: () => "decideCardState",
+    },
+
+    decideCardState: {
+      input: (data) => ({
+        hasCards: data.flowData.cards.length > 0,
+      }),
+      action: ({ hasCards }) => hasCards,
+      onOutput: (_, exists) => {
+        return exists ? "studyCard" : "noCard";
+      },
+    },
+
+    noCard: {
+      input: () => ({ card: null }),
+      view: NoCardUI,
+      onOutput: () => {},
+    },
+
+    studyCard: {
+      input: (data) => ({
+        cards: CardOps.getCardsForDisplay(data.flowData),
+      }),
+      view: FlashCardView,
+      onOutput: (data, output: ShowCardOutput, events) => {
+        const cardId = output.cardId;
+
+        if (output.action === "flip") {
+          data.flowData.activeCardId = cardId;
+          CardOps.setFlipped(data.flowData, cardId, true);
+          return "studyCard";
+        }
+
+        if (output.action === "rate") {
+          data.flowData.activeCardId = cardId;
+          CardOps.setRating(data.flowData, cardId, output.rating);
+          return "reviewCard";
+        }
+
+        if (output.action === "next") {
+          events?.studiedCounter.emit((c: number) => c + 1);
+          data.flowData.activeCardId = null;
+          return "fetchCardsData";
+        }
+      },
+    },
+
+    reviewCard: {
+      input: (data) => {
+        const activeCard = CardOps.getActiveCard(data.flowData);
+        return {
+          deckId: data.deckId,
+          cardId: data.flowData.activeCardId!,
+          rating: activeCard!.rating!,
+        };
+      },
+      action: async ({ deckId, cardId, rating }) => {
+        reviewStudiedCard(deckId, cardId, rating);
+        return { ok: true };
+      },
+      onOutput: (data, _, events) => {
+        events?.studiedCounter.emit((c: number) => c + 1);
+        data.flowData.activeCardId = null;
+        return "fetchCardsData";
+      },
+    },
+  },
+  { start: "fetchCardsData" }
+);
+```
+
+---
+
+# Reference example (UI step view component shape)
+
+UI step views MUST accept `{ input, output }` where `output.emit(...)` sends a typed output to the flow:
+
+```tsx
+"use client";
+
+import { FlashCard } from "@/lib/types/responses/FlashCard";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { playCardAudio } from "@/lib/ttsGoogle";
+import { OutputHandle } from "@myriadcodelabs/uiflow";
+import FlashCardActions, { ShowCardOutput, CardActionWithoutId } from "./FlashCardActions";
+
+type CardWithState = {
+  card: FlashCard;
+  flipped: boolean;
+  disabled: boolean;
+};
+
+type FlashCardViewProps = {
+  input: {
+    cards: CardWithState[];
+  };
+  output: OutputHandle<ShowCardOutput>;
+};
+
+export default function FlashCardView(props: FlashCardViewProps) {
+  const handleCardAction = (cardId: string, action: CardActionWithoutId) => {
+    if (action.action === "flip" || action.action === "rate" || action.action === "next") {
+      props.output.emit({ ...action, cardId });
+    }
+  };
+
+  return (
+    <div className="w-full px-4">
+      <div className="grid grid-cols-3 gap-6 w-full">
+        {props.input.cards.map((cardWithState) => (
+          <div key={cardWithState.card.id} className="flex flex-col gap-3">
+            <Card className="h-full flex flex-col">
+              <CardContent className="p-4 flex-1 flex flex-col justify-center items-center ">
+                <div className="text-2xl font-normal text-center leading-relaxed mb-6">
+                  {cardWithState.flipped ? cardWithState.card.back.text : cardWithState.card.front.text}
+                </div>
+                <Button
+                  size="lg"
+                  className="text-lg px-6 py-3"
+                  onClick={() =>
+                    playCardAudio(
+                      cardWithState.card.id,
+                      cardWithState.card.isReverse ? cardWithState.card.back.text : cardWithState.card.front.text,
+                      "de"
+                    )
+                  }
+                  disabled={cardWithState.disabled}
+                >
+                  Play Audio
+                </Button>
+              </CardContent>
+            </Card>
+            <FlashCardActions
+              input={{
+                flipped: cardWithState.flipped,
+                isRevision: cardWithState.card.isRevision,
+                disabled: cardWithState.disabled,
+              }}
+              output={{
+                emit: (action: CardActionWithoutId) => handleCardAction(cardWithState.card.id, action),
+              }}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+When asked to build multi-step UI, follow the patterns above exactly: define the flow with `defineFlow(...)`, render it with `FlowRunner`, and have views emit outputs with `output.emit(...)`.
+
+---
+
+# Generation checklist (what you should output)
+
+When the user asks for a UI:
+1) A typed `defineFlow<...>(steps, { start })` flow definition.
+2) One view component per UI step (`{ input, output }` props; emits typed outputs).
+3) A small entry component that renders `<FlowRunner flow={...} initialData={...} eventChannels={...} />` (if the user needs a runnable screen).
