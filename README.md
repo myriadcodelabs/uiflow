@@ -28,6 +28,11 @@ type CardWithState = {
   rating: "easy" | "medium" | "hard" | null;
 };
 
+export type ShowCardOutput =
+    | { action: "flip"; cardId: string }
+    | { action: "rate"; rating: Rating; cardId: string }
+    | { action: "next"; cardId: string };
+
 const studiedCounter = createFlowChannel<number>(0);
 
 
@@ -112,7 +117,7 @@ The example components are defined here.
 ```tsx
 const CardView: React.FC<{
   input: { cards: CardWithState[] };
-  output: { emit: (value: { cardId: string; action: "flip" | "rate" | "next"; rating?: CardWithState["rating"] }) => void };
+  output: OutputHandle<ShowCardOutput>;
 }> = ({ input, output }) => (
   <div>
     {input.cards.map((card) => (
