@@ -8,6 +8,13 @@ Explicit, code-first UI flow orchestration for React. UIFlow lets you define flo
 - **Flexibility:** Combine UI steps and async logic steps in the same flow.
 - **Reusability:** Share cross‑flow state through event channels.
 
+
+### Installation
+use
+```
+npm install @myriadcodelabs/uiflow@0.1.0
+```
+
 ## Quick example
 
 ```tsx
