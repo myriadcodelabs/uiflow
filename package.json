@@ -1,0 +1,33 @@
+{
+  "name": "@myriadcodelabs/uiflow",
+  "version": "0.1.0",
+  "description": "Explicit, code-first UI flow orchestration for React.",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "clean": "rimraf dist",
+    "build": "pnpm run clean && tsc"
+  },
+  "keywords": [],
+  "author": "Muhammad Ismail Khan",
+  "license": "MIT",
+  "packageManager": "pnpm@10.20.0",
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.10",
+    "typescript": "^5.9.3"
+  },
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/uiflow.js",
+  "types": "./dist/uiflow.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/uiflow.d.ts",
+      "default": "./dist/uiflow.js"
+    }
+  }
+}
