@@ -33,6 +33,7 @@ const studiedCounter = createFlowChannel<number>(0);
 
 const studyFlow = defineFlow<StudyData>(
   {
+    // step 1
     fetchCards: {
       input: (data) => ({ deckId: data.deckId }),
       action: async ({ deckId }, data) => {
@@ -43,16 +44,20 @@ const studyFlow = defineFlow<StudyData>(
       },
       onOutput: () => "decide",
     },
+
+    // step 2
     decide: {
       input: (data) => ({ hasCards: data.cards.length > 0 }),
       action: ({ hasCards }) => hasCards,
       onOutput: (_, exists) => (exists ? "study" : "noCard"),
     },
+    // if no card present
     noCard: {
       input: () => ({}),
       view: NoCardView,
       onOutput: () => {},
     },
+    // step 3
     study: {
       input: (data) => ({ cards: data.cards }),
       view: CardView,
@@ -79,6 +84,8 @@ const studyFlow = defineFlow<StudyData>(
         }
       },
     },
+
+    // step 4: if user does review
     review: {
       input: (data) => ({
         deckId: data.deckId,
