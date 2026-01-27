@@ -12,7 +12,7 @@ Explicit, code-first UI flow orchestration for React. UIFlow lets you define flo
 ### Installation
 use
 ```
-npm install @myriadcodelabs/uiflow@0.1.0
+npm i @myriadcodelabs/uiflow@0.1.0
 ```
 
 ## Quick example
