@@ -1,197 +1,309 @@
 # UIFlow
 
-Explicit, code-first UI flow orchestration for React. UIFlow lets you define flows as plain objects with named steps, mix UI and logic steps, and move between them by returning the next step name. It’s useful when you want predictable, testable multi‑step experiences without wiring up routers, wizards, or state machines by hand.
+Code-first flow orchestration for React.
 
-## Why it matters
+UIFlow helps you build multi-step UI without scattering state and transition logic across many components. You define steps in one place, and each step decides what comes next.
 
-- **Clarity:** Flows are defined in one place with explicit step names and transitions.
-- **Flexibility:** Combine UI steps and async logic steps in the same flow.
-- **Reusability:** Share cross‑flow state through event channels.
+## Why UIFlow
 
+- Keep flow logic explicit: step names + transitions are centralized.
+- Mix UI and async logic naturally: both are first-class steps.
+- Share state across independent flows with channels.
+- Stay in plain TypeScript objects, not custom DSLs.
 
-### Installation
-use
+## Mental model (60 seconds)
+
+A flow is:
+- `steps`: a map of step names to step definitions
+- `start`: first step name
+
+A step is either:
+- UI step: `input`, `view`, `onOutput`
+- Action step: `input`, `action`, `onOutput`
+
+Transition rule:
+- `onOutput` returns next step name (string) to move forward
+- returning `void` keeps the same step and re-renders
+
+## Install
+
+```bash
+pnpm add @myriadcodelabs/uiflow
+# or
+npm i @myriadcodelabs/uiflow
+# or
+yarn add @myriadcodelabs/uiflow
 ```
-npm i @myriadcodelabs/uiflow@0.1.0
+
+## Imports
+
+```ts
+import { FlowRunner, defineFlow, createFlowChannel, type OutputHandle } from "@myriadcodelabs/uiflow";
 ```
 
-## Quick example
+Use package-root imports only.
+
+## Quick start (minimal runnable example)
 
 ```tsx
-import React from "react";
-import { FlowRunner, defineFlow, createFlowChannel } from "@myriadcodelabs/uiflow";
+"use client";
 
-type StudyData = {
-  deckId: string;
-  cards: CardWithState[];
-  activeCardId: string | null;
-};
+import { FlowRunner, defineFlow, type OutputHandle } from "@myriadcodelabs/uiflow";
 
-type CardWithState = {
-  id: string;
-  question: string;
-  answer: string;
-  flipped: boolean;
-  rating: "easy" | "medium" | "hard" | null;
-};
+type Data = { name: string };
+type AskNameOutput = { action: "setName"; value: string } | { action: "submit" };
 
-export type ShowCardOutput =
-    | { action: "flip"; cardId: string }
-    | { action: "rate"; rating: Rating; cardId: string }
-    | { action: "next"; cardId: string };
+function AskNameView(props: {
+  input: { name: string };
+  output: OutputHandle<AskNameOutput>;
+}) {
+  return (
+    <div>
+      <input
+        value={props.input.name}
+        onChange={(e) => props.output.emit({ action: "setName", value: e.target.value })}
+        placeholder="Your name"
+      />
+      <button onClick={() => props.output.emit({ action: "submit" })}>Continue</button>
+    </div>
+  );
+}
 
-const studiedCounter = createFlowChannel<number>(0);
+function DoneView(props: { input: { message: string }; output: OutputHandle<never> }) {
+  return <h2>{props.input.message}</h2>;
+}
 
-
-const studyFlow = defineFlow<StudyData>(
+const onboardingFlow = defineFlow<Data>(
   {
-    // step 1
+    askName: {
+      input: (data) => ({ name: data.name }),
+      view: AskNameView,
+      onOutput: (data, output) => {
+        if (output.action === "setName") {
+          data.name = output.value;
+          return;
+        }
+        if (output.action === "submit") {
+          return "done";
+        }
+      },
+    },
+
+    done: {
+      input: (data) => ({ message: `Welcome, ${data.name || "friend"}!` }),
+      view: DoneView,
+      onOutput: () => {},
+    },
+  },
+  { start: "askName" }
+);
+
+export function App() {
+  return <FlowRunner flow={onboardingFlow} initialData={{ name: "" }} />;
+}
+```
+
+## Practical pattern: study/review flow (real-world)
+
+This pattern is taken from practical flashcards usage.
+
+```ts
+import { defineFlow } from "@myriadcodelabs/uiflow";
+
+type Data = {
+  deckId: string;
+  flowData: {
+    cards: Array<{ id: string; flipped: boolean; rating: "easy" | "good" | "hard" | "again" | null }>;
+    activeCardId: string | null;
+  };
+};
+
+type StudyOutput =
+  | { action: "flip"; cardId: string }
+  | { action: "rate"; cardId: string; rating: "easy" | "good" | "hard" | "again" }
+  | { action: "next"; cardId: string };
+
+export const studyFlow = defineFlow<Data>(
+  {
     fetchCards: {
       input: (data) => ({ deckId: data.deckId }),
       action: async ({ deckId }, data) => {
-        const cards = await fakeFetchCards(deckId);
-        data.cards = cards.map((card) => ({ ...card, flipped: false, rating: null }));
-        data.activeCardId = null;
+        const cards = await fetchCardsListAction(deckId);
+        data.flowData.cards = (cards ?? []).map((c) => ({ id: c.id, flipped: false, rating: null }));
+        data.flowData.activeCardId = null;
         return { ok: true };
       },
       onOutput: () => "decide",
     },
 
-    // step 2
     decide: {
-      input: (data) => ({ hasCards: data.cards.length > 0 }),
+      input: (data) => ({ hasCards: data.flowData.cards.length > 0 }),
       action: ({ hasCards }) => hasCards,
-      onOutput: (_, exists) => (exists ? "study" : "noCard"),
+      onOutput: (_, hasCards) => (hasCards ? "study" : "empty"),
     },
-    // if no card present
-    noCard: {
-      input: () => ({}),
-      view: NoCardView,
-      onOutput: () => {},
-    },
-    // step 3
-    study: {
-      input: (data) => ({ cards: data.cards }),
-      view: CardView,
-      onOutput: (data, output, events) => {
-        const card = data.cards.find((c) => c.id === output.cardId);
-        if (!card) return "study";
 
+    study: {
+      input: (data) => ({ cards: data.flowData.cards, activeCardId: data.flowData.activeCardId }),
+      view: StudyCardsView,
+      onOutput: (data, output: StudyOutput, events) => {
         if (output.action === "flip") {
-          data.activeCardId = card.id;
-          card.flipped = true;
+          data.flowData.activeCardId = output.cardId;
+          const card = data.flowData.cards.find((c) => c.id === output.cardId);
+          if (card) card.flipped = true;
           return "study";
         }
 
         if (output.action === "rate") {
-          data.activeCardId = card.id;
-          card.rating = output.rating ?? null;
+          data.flowData.activeCardId = output.cardId;
+          const card = data.flowData.cards.find((c) => c.id === output.cardId);
+          if (card) card.rating = output.rating;
           return "review";
         }
 
         if (output.action === "next") {
-          events?.studiedCounter.emit((c) => c + 1);
-          data.activeCardId = null;
+          events?.studiedCounter.emit((n: number) => n + 1);
+          data.flowData.activeCardId = null;
           return "fetchCards";
         }
       },
     },
 
-    // step 4: if user does review
     review: {
       input: (data) => ({
         deckId: data.deckId,
-        cardId: data.activeCardId!,
-        rating: data.cards.find((c) => c.id === data.activeCardId)?.rating!,
+        cardId: data.flowData.activeCardId,
+        rating: data.flowData.cards.find((c) => c.id === data.flowData.activeCardId)?.rating,
       }),
       action: async ({ deckId, cardId, rating }) => {
-        await fakeReviewCard(deckId, cardId, rating);
+        await reviewCard(deckId, cardId, rating);
         return { ok: true };
       },
       onOutput: (data, _, events) => {
-        events?.studiedCounter.emit((c) => c + 1);
-        data.activeCardId = null;
+        events?.studiedCounter.emit((n: number) => n + 1);
+        data.flowData.activeCardId = null;
         return "fetchCards";
       },
+    },
+
+    empty: {
+      input: () => ({}),
+      view: EmptyView,
+      onOutput: () => {},
     },
   },
   { start: "fetchCards" }
 );
 ```
 
-The example components are defined here.
+## Cross-flow communication with channels
+
+Use channels when two independent flows need shared reactive state.
 
 ```tsx
-const CardView: React.FC<{
-  input: { cards: CardWithState[] };
-  output: OutputHandle<ShowCardOutput>;
-}> = ({ input, output }) => (
-  <div>
-    {input.cards.map((card) => (
-      <div key={card.id}>
-        <div>{card.question}</div>
-        {card.flipped ? <div>{card.answer}</div> : null}
-        <button onClick={() => output.emit({ cardId: card.id, action: "flip" })}>Show Answer</button>
-        <button onClick={() => output.emit({ cardId: card.id, action: "rate", rating: "easy" })}>Easy</button>
-        <button onClick={() => output.emit({ cardId: card.id, action: "rate", rating: "medium" })}>Medium</button>
-        <button onClick={() => output.emit({ cardId: card.id, action: "rate", rating: "hard" })}>Hard</button>
-        <button onClick={() => output.emit({ cardId: card.id, action: "next" })}>Next</button>
-      </div>
-    ))}
-  </div>
-);
+"use client";
 
-const NoCardView: React.FC<{ input: {}; output: { emit: () => void } }> = () => (
-  <div>No cards available.</div>
-);
-```
-The FlowRunner is used to call the flow and set initial data and channels.
+import { useMemo } from "react";
+import { createFlowChannel, FlowRunner } from "@myriadcodelabs/uiflow";
 
-```tsx
-export function App() {
+export function FlashcardsScreen({ deckId }: { deckId: string }) {
+  const studiedCounter = useMemo(() => createFlowChannel<number>(0), []);
+  const channels = useMemo(() => ({ studiedCounter }), [studiedCounter]);
+
   return (
-    <FlowRunner
-      flow={studyFlow}
-      initialData={{ deckId: "deck-1", cards: [], activeCardId: null }}
-      eventChannels={{ studiedCounter }}
-    />
+    <>
+      <FlowRunner flow={counterFlow} initialData={{}} eventChannels={channels} />
+      <FlowRunner
+        flow={studyFlow}
+        initialData={{ deckId, flowData: { cards: [], activeCardId: null } }}
+        eventChannels={channels}
+      />
+    </>
   );
 }
 ```
 
-## API Reference (exported only)
+## API reference
 
-### 1) Where the flow is called
+### `defineFlow(steps, { start })`
+- Validates `start` exists in `steps`.
+- Returns flow definition consumed by `FlowRunner`.
 
-#### `FlowRunner` (React component)
-Runs a flow and renders UI steps.
+### `FlowRunner`
 
 ```tsx
 <FlowRunner flow={flow} initialData={initialData} eventChannels={channels} />
 ```
 
-- `flow: FlowDefinition<D>` — created by `defineFlow`.
-- `initialData: D` — shared mutable data for this flow instance.
-- `eventChannels?: EventChannels` — optional shared channels; emitting causes re-render.
+Props:
+- `flow`: flow definition
+- `initialData`: mutable per-flow data object
+- `eventChannels?`: optional channels map
 
-### 2) Where the flow is defined
+### `createFlowChannel(initial)`
+Creates channel with:
+- `get()`
+- `emit(update)`
+- `subscribe(listener)`
 
-#### `defineFlow<D>(steps: FlowSteps<D>, options: DefineFlowOptions): FlowDefinition<D>`
-Creates a flow definition from a steps map and a required `start` step name.
+### `OutputHandle<O>`
+UI steps emit events with:
+- `output.emit(payload)`
 
-- `DefineFlowOptions.start: string` — name of the first step.
+## How to keep flows manageable
 
-#### `createFlowChannel<T>(initial: T): FlowChannel<T>`
-Creates a shared channel for cross‑flow communication.
+1. Keep views dumb: render from `input`, emit intent via `output.emit`.
+2. Keep transition logic in `onOutput` only.
+3. Use discriminated unions for UI output types.
+4. Co-locate domain state (example: card + flipped + rating in one structure).
+5. Use helper functions for repeated state ops.
+6. Split long flows into focused steps (`fetch`, `decide`, `view`, `commit`).
 
-- `FlowChannel.get(): T` — read the current value.
-- `FlowChannel.emit(update: T | (prev: T) => T): void` — update value and notify subscribers.
-- `FlowChannel.subscribe(listener: () => void): () => void` — listen for changes.
+## Important runtime behavior
 
+1. A step is treated as action step when it has `action` and does not have `view`.
+2. Action step runs automatically when it becomes current.
+3. `eventChannels` are captured once on first `FlowRunner` render.
+4. Channel emissions trigger re-render for subscribed runners.
+5. Returning unknown step or `void` does not change current step.
+6. `initialData` is shallow-copied at runner initialization.
 
-### 3) A UI component
+## Pitfalls to avoid
 
-#### `OutputHandle<O>`
-Used by UI steps to emit output back into the flow.
+1. Creating channel instances directly in render without memoization.
+2. Rebuilding `eventChannels` object each render.
+3. Using `output.done(...)` instead of `output.emit(...)`.
+4. Mixing `view` and `action` in the same step.
+5. Returning transition targets that do not exist.
 
-- `OutputHandle.emit(output: O): void`
+## Next.js notes
+
+- `FlowRunner` and UI step views should be in client components.
+- Add `"use client"` at the top where needed.
+- Server actions can be called inside action steps.
+
+## FAQ
+
+### Why not just `useState` + `useEffect`?
+
+You can for simple screens. UIFlow is useful when screens become multi-step and transitions/side-effects spread across components.
+
+### Is flow data immutable?
+
+No. Flow data is mutable by design inside step handlers.
+
+### Can I have multiple flows on one page?
+
+Yes. Use channels when they need to communicate.
+
+## Complete checklist before shipping
+
+1. `start` exists and all transitions target valid step keys.
+2. UI outputs are typed unions.
+3. Views only emit intent.
+4. Async work is in action steps.
+5. Channels are stable and reused.
+6. No internal-path imports.
+
+## License
+
+MIT
