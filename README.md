@@ -238,6 +238,7 @@ Props:
 - `flow`: flow definition
 - `initialData`: mutable per-flow data object
 - `eventChannels?`: optional channels map
+- `eventChannelsStrategy?`: `"sticky"` (default) or `"replace"`
 
 ### `createFlowChannel(initial)`
 Creates channel with:
@@ -262,15 +263,17 @@ UI steps emit events with:
 
 1. A step is treated as action step when it has `action` and does not have `view`.
 2. Action step runs automatically when it becomes current.
-3. `eventChannels` are captured once on first `FlowRunner` render.
+3. `FlowRunner` normalizes channels before subscribing:
+   - `"sticky"` (default): keeps first-seen channel instance per key.
+   - `"replace"`: uses the latest incoming channel instances.
 4. Channel emissions trigger re-render for subscribed runners.
 5. Returning unknown step or `void` does not change current step.
 6. `initialData` is shallow-copied at runner initialization.
 
 ## Pitfalls to avoid
 
-1. Creating channel instances directly in render without memoization.
-2. Rebuilding `eventChannels` object each render.
+1. Creating channel instances directly in render can reset channel value if keys change or if using `"replace"` strategy.
+2. Rebuilding `eventChannels` object each render is safe; `FlowRunner` deduplicates equivalent maps internally.
 3. Using `output.done(...)` instead of `output.emit(...)`.
 4. Mixing `view` and `action` in the same step.
 5. Returning transition targets that do not exist.

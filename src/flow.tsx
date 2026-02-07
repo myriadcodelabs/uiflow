@@ -159,6 +159,13 @@ export interface FlowRunnerProps<D extends FlowData = FlowData> {
     // Optional map of shared channels.
     // If you don't pass it, the flow behaves exactly like before.
     eventChannels?: EventChannels;
+
+    /**
+     * How FlowRunner treats incoming eventChannels across parent re-renders.
+     * - "sticky" (default): keep first-seen channel instance per key; ignore replacements for existing keys.
+     * - "replace": accept incoming channels as source of truth.
+     */
+    eventChannelsStrategy?: "sticky" | "replace";
 }
 
 /**
@@ -181,15 +188,55 @@ interface RunnerState<D extends FlowData> {
 export function FlowRunner<D extends FlowData = FlowData>(
     props: Readonly<FlowRunnerProps<D>>
 ) {
+    const {
+        flow,
+        initialData,
+        eventChannels,
+        eventChannelsStrategy = "sticky",
+    } = props;
 
-    const eventChannelsRef = useRef<EventChannels | undefined>(undefined);
+    const resolvedChannelsRef = useRef<EventChannels | undefined>(undefined);
 
-    eventChannelsRef.current ??= props.eventChannels;
+    const getResolvedChannels = (): EventChannels | undefined => {
+        const prev = resolvedChannelsRef.current;
+        const incoming = eventChannels;
 
-    const eventChannels = eventChannelsRef.current;
+        if (!incoming) {
+            resolvedChannelsRef.current = undefined;
+            return undefined;
+        }
 
+        const incomingEntries = Object.entries(incoming);
 
-    const { flow, initialData } = props;
+        let candidate: EventChannels;
+
+        if (eventChannelsStrategy === "sticky") {
+            candidate = {};
+
+            for (const [key, channel] of incomingEntries) {
+                candidate[key] = prev?.[key] ?? channel;
+            }
+        } else {
+            candidate = incoming;
+        }
+
+        if (prev) {
+            const prevKeys = Object.keys(prev);
+            const candidateKeys = Object.keys(candidate);
+
+            if (
+                prevKeys.length === candidateKeys.length &&
+                candidateKeys.every((k) => prev[k] === candidate[k])
+            ) {
+                return prev;
+            }
+        }
+
+        resolvedChannelsRef.current = candidate;
+        return candidate;
+    };
+
+    const resolvedEventChannels = getResolvedChannels();
 
     // We keep data and currentStep in state so React re-renders on change.
     const [state, setState] = useState<RunnerState<D>>({
@@ -205,18 +252,17 @@ export function FlowRunner<D extends FlowData = FlowData>(
     // It only exists to force a re-render when event channels change.
     const [_tick, setTick] = useState(0);
 
-    // NEW:
-    // Subscribe to every provided channel.
-    // When any channel emits, we trigger a re-render of this FlowRunner.
+    // Subscribe to every provided channel and keep subscriptions in sync
+    // with the current eventChannels prop.
     useEffect(() => {
-        if (!eventChannels) return;
+        if (!resolvedEventChannels) return;
 
-        const unsubs = Object.values(eventChannels).map((ch) =>
+        const unsubs = Object.values(resolvedEventChannels).map((ch) =>
             ch.subscribe(() => setTick((x) => x + 1))
         );
 
         return () => unsubs.forEach((u) => u());
-    }, []);
+    }, [resolvedEventChannels]);
 
 
     const { currentStep, data } = state;
@@ -258,9 +304,9 @@ export function FlowRunner<D extends FlowData = FlowData>(
         (async () => {
             try {
                 setBusy(true);
-                const input = actionStep.input(state.data, eventChannels);
-                const output = await actionStep.action(input, state.data, eventChannels);
-                const next = await actionStep.onOutput(state.data, output, eventChannels);
+                const input = actionStep.input(state.data, resolvedEventChannels);
+                const output = await actionStep.action(input, state.data, resolvedEventChannels);
+                const next = await actionStep.onOutput(state.data, output, resolvedEventChannels);
                 applyTransition(next);
             } catch (e) {
                 console.error("FlowRunner action step error:", e);
@@ -304,12 +350,12 @@ export function FlowRunner<D extends FlowData = FlowData>(
 
     const uiStep = step as UiStep<D, any, any>;
     const ViewComponent = uiStep.view;
-    const input = uiStep.input(data, eventChannels);
+    const input = uiStep.input(data, resolvedEventChannels);
 
     const outputHandle: OutputHandle<any> = {
         emit: async (output) => {
             try {
-                const next = await uiStep.onOutput(data, output, eventChannels);
+                const next = await uiStep.onOutput(data, output, resolvedEventChannels);
                 applyTransition(next);
             } catch (e) {
                 console.error("FlowRunner UI step onOutput error:", e);
@@ -319,5 +365,3 @@ export function FlowRunner<D extends FlowData = FlowData>(
 
     return <ViewComponent input={input} output={outputHandle} />;
 }
-
-
