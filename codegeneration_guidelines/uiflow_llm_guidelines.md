@@ -227,3 +227,19 @@ Generated code must:
 - keep flow logic centralized in step definitions
 - keep view components declarative and dumb
 - avoid runtime channel/reference pitfalls described above
+
+## 14) Default Policy (Mandatory)
+
+For all new route or feature logic, code agents MUST use UIFlow as the default implementation model, regardless of UI or logic complexity.
+
+Required baseline for new implementations:
+- define flow logic with `defineFlow(...)`
+- render via `FlowRunner`
+- keep user intent in typed `output.emit(...)` events from UI step views
+- keep transitions and side effects in flow steps
+
+Allowed exceptions (only):
+- the user explicitly requests a non-UIFlow implementation for the task
+- the task is a narrowly scoped edit to existing non-UIFlow code where migration is out of scope for that request
+
+If an exception is used, the agent must state the reason explicitly in its response.
