@@ -35,7 +35,9 @@ Creates a shared channel object:
 
 ### `defineFlow(steps, { start })`
 - Throws if `start` is missing or not present in `steps`.
-- Returns `{ steps, start }`.
+- Supports optional `channelTransitions` map (`channel key -> transition`).
+- Each transition is a resolver function returning `nextStep | void` (sync or async) with context `{ data, currentStep, events, channelKey }`.
+- Returns `{ steps, start, channelTransitions? }`.
 
 ### `FlowRunner`
 
@@ -62,11 +64,14 @@ These details are required for correct generated code.
 7. With `"replace"`, latest incoming channel instances are used.
 8. Equivalent channel maps are deduplicated to avoid unnecessary re-subscription churn.
 9. Any channel `emit` triggers FlowRunner re-render.
-10. `initialData` is shallow-copied once at initialization (`data: { ...initialData }`).
-11. Data is mutable inside steps; transitions force re-render by cloning `data` reference.
-12. If `onOutput` returns an unknown step name or `void`, FlowRunner stays on current step and re-renders.
-13. Step errors are logged (`console.error`) and not rethrown.
-14. Action steps render `"Processing..."` while busy.
+10. If `channelTransitions[channelKey]` is configured, channel `emit` evaluates resolver and transitions only when a valid step is returned.
+11. Resolver functions can inspect channel state via `events?.[channelKey]?.get()` to apply conditional logic.
+12. `initialData` is shallow-copied once at initialization (`data: { ...initialData }`).
+13. Data is mutable inside steps; transitions force re-render by cloning `data` reference.
+14. If `onOutput` returns an unknown step name or `void`, FlowRunner stays on current step and re-renders.
+15. Step errors are logged (`console.error`) and not rethrown.
+16. Action steps render `"Processing..."` while busy.
+17. Channel transition resolver errors are logged (`console.error`) and runner falls back to re-rendering current step.
 
 ## 5) Hard constraints for generated code
 
@@ -210,6 +215,7 @@ export const flow = defineFlow<Data>(
 7. Expecting deep reactivity on `initialData` prop changes.
 8. Emitting flow outputs for no-op intents that do not change visible UI or meaningful flow state.
 9. Introducing extra orchestration layers (event buses/channels/wrappers) when a direct local handler is sufficient.
+10. Using static string values in `channelTransitions` (must be resolver functions).
 
 ## 12) Generation checklist for agents
 

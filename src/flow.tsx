@@ -59,6 +59,16 @@ export function createFlowChannel<T>(initial: T): FlowChannel<T> {
  */
 export type FlowData = Record<string, any>;
 
+export interface ChannelTransitionContext<D extends FlowData = FlowData> {
+    data: D;
+    currentStep: string;
+    events?: EventChannels;
+    channelKey: string;
+}
+
+export type ChannelTransitionResolver<D extends FlowData = FlowData> =
+    (context: ChannelTransitionContext<D>) => string | void | Promise<string | void>;
+
 /**
  * Output handle given to UI components.
  * They call output.emit(...) when they're finished.
@@ -117,13 +127,20 @@ export type FlowSteps<D extends FlowData = FlowData> = Record<
 export interface FlowDefinition<D extends FlowData = FlowData> {
     steps: FlowSteps<D>;
     start: string;
+    channelTransitions?: Record<string, ChannelTransitionResolver<D>>;
 }
 
 /**
  * Options when defining a flow.
  */
-export interface DefineFlowOptions {
+export interface DefineFlowOptions<D extends FlowData = FlowData> {
     start: string;
+    /**
+     * Optional channel transition mapping.
+     * Each channel key maps to a resolver function with conditional logic
+     * that returns target step name (or void to stay).
+     */
+    channelTransitions?: Record<string, ChannelTransitionResolver<D>>;
 }
 
 /**
@@ -131,16 +148,18 @@ export interface DefineFlowOptions {
  */
 export function defineFlow<D extends FlowData = FlowData>(
     steps: FlowSteps<D>,
-    options: DefineFlowOptions
+    options: DefineFlowOptions<D>
 ): FlowDefinition<D> {
     if (!options.start || !steps[options.start]) {
         throw new Error(
             `defineFlow: 'start' must be provided and exist in steps. Got '${options.start}'.`
         );
     }
+
     return {
         steps,
         start: options.start,
+        channelTransitions: options.channelTransitions,
     };
 }
 
@@ -252,19 +271,6 @@ export function FlowRunner<D extends FlowData = FlowData>(
     // It only exists to force a re-render when event channels change.
     const [_tick, setTick] = useState(0);
 
-    // Subscribe to every provided channel and keep subscriptions in sync
-    // with the current eventChannels prop.
-    useEffect(() => {
-        if (!resolvedEventChannels) return;
-
-        const unsubs = Object.values(resolvedEventChannels).map((ch) =>
-            ch.subscribe(() => setTick((x) => x + 1))
-        );
-
-        return () => unsubs.forEach((u) => u());
-    }, [resolvedEventChannels]);
-
-
     const { currentStep, data } = state;
 
     const applyTransition = (nextStepName?: string | void) => {
@@ -284,6 +290,49 @@ export function FlowRunner<D extends FlowData = FlowData>(
             }));
         }
     };
+
+    const runChannelTransition = async (channelKey: string): Promise<void> => {
+        const transition = flow.channelTransitions?.[channelKey];
+        if (!transition) {
+            setTick((x) => x + 1);
+            return;
+        }
+
+        try {
+            const nextStep = await transition({
+                data,
+                currentStep,
+                events: resolvedEventChannels,
+                channelKey,
+            });
+            if (nextStep) {
+                applyTransition(nextStep);
+                return;
+            }
+
+            setTick((x) => x + 1);
+        } catch (e) {
+            console.error("FlowRunner channel transition error:", e);
+            setTick((x) => x + 1);
+        }
+    };
+
+    // Subscribe to every provided channel and keep subscriptions in sync
+    // with the current eventChannels prop.
+    useEffect(() => {
+        if (!resolvedEventChannels) return;
+
+        const unsubs = Object.entries(resolvedEventChannels).map(([channelKey, ch]) =>
+            ch.subscribe(() => {
+                void runChannelTransition(channelKey);
+            })
+        );
+
+        return () => unsubs.forEach((u) => u());
+        // applyTransition and runChannelTransition are recreated each render;
+        // subscription identity is driven by channels map.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [flow.channelTransitions, resolvedEventChannels]);
 
     useEffect(() => {
         return () => {

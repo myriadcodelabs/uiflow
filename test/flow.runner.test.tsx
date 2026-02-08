@@ -316,4 +316,77 @@ describe("FlowRunner", () => {
         expect(tracked.stats.activeSubscribers()).toBe(0);
         expect(tracked.stats.unsubscribeCalls).toBe(1);
     });
+
+    it("transitions to mapped step when channelTransitions resolver returns a step", async () => {
+        type Data = {};
+        const refresh = createFlowChannel<number>(0);
+        const flow = defineFlow<Data>(
+            {
+                idle: {
+                    input: () => ({ value: "idle" }),
+                    view: DisplayView,
+                    onOutput: () => {},
+                },
+                refreshed: {
+                    input: () => ({ value: "refreshed" }),
+                    view: DisplayView,
+                    onOutput: () => {},
+                },
+            },
+            {
+                start: "idle",
+                channelTransitions: {
+                    refresh: () => "refreshed",
+                },
+            }
+        );
+
+        render(<FlowRunner flow={flow} initialData={{}} eventChannels={{ refresh }} />);
+        expect(screen.getByText("idle")).toBeInTheDocument();
+
+        act(() => {
+            refresh.emit((n) => n + 1);
+        });
+
+        expect(await screen.findByText("refreshed")).toBeInTheDocument();
+    });
+
+    it("supports conditional channelTransitions via resolver function", async () => {
+        type Data = {};
+        const refresh = createFlowChannel<number>(0);
+        const flow = defineFlow<Data>(
+            {
+                idle: {
+                    input: () => ({ value: "idle" }),
+                    view: DisplayView,
+                    onOutput: () => {},
+                },
+                refreshed: {
+                    input: () => ({ value: "refreshed" }),
+                    view: DisplayView,
+                    onOutput: () => {},
+                },
+            },
+            {
+                start: "idle",
+                channelTransitions: {
+                    refresh: ({ events }) =>
+                        (events?.refresh.get() ?? 0) >= 2 ? "refreshed" : undefined,
+                },
+            }
+        );
+
+        render(<FlowRunner flow={flow} initialData={{}} eventChannels={{ refresh }} />);
+        expect(screen.getByText("idle")).toBeInTheDocument();
+
+        act(() => {
+            refresh.emit((n) => n + 1);
+        });
+        expect(screen.getByText("idle")).toBeInTheDocument();
+
+        act(() => {
+            refresh.emit((n) => n + 1);
+        });
+        expect(await screen.findByText("refreshed")).toBeInTheDocument();
+    });
 });
