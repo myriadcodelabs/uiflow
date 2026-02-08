@@ -204,11 +204,12 @@ export const flow = defineFlow<Data>(
 1. Importing from `@myriadcodelabs/uiflow/dist/*` in app code.
 2. Using `output.done(...)` (correct method is `output.emit(...)`).
 3. Returning nonexistent step names.
-4. Putting network calls directly in UI views.
+4. Putting application data fetch/mutation logic directly in UI views.
 5. Creating channels every render without memoization/ref.
 6. Picking the wrong strategy (`"replace"` vs `"sticky"`) for your channel lifecycle needs.
 7. Expecting deep reactivity on `initialData` prop changes.
 8. Emitting flow outputs for no-op intents that do not change visible UI or meaningful flow state.
+9. Introducing extra orchestration layers (event buses/channels/wrappers) when a direct local handler is sufficient.
 
 ## 12) Generation checklist for agents
 
@@ -262,3 +263,17 @@ Rules:
 
 Decision test before adding an output transition:
 - If this click did nothing except re-render the same UI, do not emit a flow output for it.
+
+## 16) Simplicity First (Mandatory)
+
+Goal:
+- Use UIFlow to simplify control flow, not to add abstraction overhead.
+
+Rules:
+- Prefer the smallest implementation that satisfies requirements and remains readable.
+- Do not add channels, event buses, or helper layers unless there is a concrete need (cross-flow coordination, shared subscriptions, replacement semantics, or lifecycle ownership requirements).
+- If a local UI handler can perform a non-stateful side effect safely, prefer that over extra orchestration.
+- Reuse established simple patterns already present in the codebase unless there is a documented reason to diverge.
+
+Decision test:
+- If removing an added layer keeps behavior and clarity the same or better, that layer should not exist.

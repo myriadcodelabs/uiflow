@@ -61,7 +61,7 @@ export type FlowData = Record<string, any>;
 
 /**
  * Output handle given to UI components.
- * They call output.done(...) when they're finished.
+ * They call output.emit(...) when they're finished.
  */
 export interface OutputHandle<O = any> {
     emit: (output: O) => void;
@@ -71,7 +71,7 @@ export interface OutputHandle<O = any> {
  * UI step:
  * - Prepares `input` from `data`
  * - Renders `view`
- * - Receives `output` from the component via output.done()
+ * - Receives `output` from the component via output.emit()
  * - `onOutput` decides next step and can mutate data
  */
 export interface UiStep<D extends FlowData = FlowData, I = any, O = any> {
