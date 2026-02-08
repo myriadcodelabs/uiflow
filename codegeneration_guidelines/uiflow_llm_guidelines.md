@@ -208,6 +208,7 @@ export const flow = defineFlow<Data>(
 5. Creating channels every render without memoization/ref.
 6. Picking the wrong strategy (`"replace"` vs `"sticky"`) for your channel lifecycle needs.
 7. Expecting deep reactivity on `initialData` prop changes.
+8. Emitting flow outputs for no-op intents that do not change visible UI or meaningful flow state.
 
 ## 12) Generation checklist for agents
 
@@ -219,6 +220,7 @@ When asked to implement a new flow, produce:
 4. UI step components with `{ input, output }` contract.
 5. `FlowRunner` entry component with stable `eventChannels` (if channels are needed).
 6. No placeholders, no pseudocode, and no internal-path imports.
+7. No no-op transitions: each emitted output must either update rendered UI, update meaningful state, or trigger a required side-effect represented in state.
 
 ## 13) Minimum quality bar
 
@@ -243,3 +245,20 @@ Allowed exceptions (only):
 - the task is a narrowly scoped edit to existing non-UIFlow code where migration is out of scope for that request
 
 If an exception is used, the agent must state the reason explicitly in its response.
+
+## 15) Render Discipline (Mandatory)
+
+Goal:
+- Trigger flow transitions and FlowRunner re-renders only when there is a user-visible UI change or a meaningful flow-state change required for UX.
+
+Rules:
+- Do not route simple side-effect-only clicks through flow outputs when no UI/state update is needed.
+- For side-effect-only actions with no required state transition, execute the side effect without introducing a flow transition.
+- Use flow outputs and action steps when at least one of these is true:
+  - UI loading/disabled/error/success state must be shown
+  - rendered data changes
+  - navigation/step transition is required
+  - shared flow/channel state must change
+
+Decision test before adding an output transition:
+- If this click did nothing except re-render the same UI, do not emit a flow output for it.
