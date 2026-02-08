@@ -19,7 +19,7 @@ A flow is:
 
 A step is either:
 - UI step: `input`, `view`, `onOutput`
-- Action step: `input`, `action`, `onOutput`
+- Action step: `input`, `action`, `onOutput` (optional `render` policy)
 
 Transition rule:
 - `onOutput` returns next step name (string) to move forward
@@ -263,6 +263,12 @@ Props:
 - `eventChannels?`: optional channels map
 - `eventChannelsStrategy?`: `"sticky"` (default) or `"replace"`
 
+Action-step render policy:
+- Default: action step renders nothing while running.
+- Per action step, you can override with:
+  - `render: { mode: "preserve-previous" }`
+  - `render: { mode: "fallback", view: SavingView }`
+
 ### `createFlowChannel(initial)`
 Creates channel with:
 - `get()`
@@ -291,9 +297,12 @@ UI steps emit events with:
    - `"replace"`: uses the latest incoming channel instances.
 4. Channel emissions trigger re-render for subscribed runners.
 5. If `channelTransitions[channelKey]` exists, channel `emit` runs that resolver and transitions when a valid step is returned.
-6. Errors in `onOutput`, action steps, or channel transition resolvers are logged (`console.error`) and not rethrown.
-7. Returning unknown step or `void` does not change current step.
-8. `initialData` is shallow-copied at runner initialization.
+6. Action steps render `null` by default while running.
+7. `render.mode = "preserve-previous"` keeps previous UI step rendered while the action is running.
+8. `render.mode = "fallback"` renders the action step fallback view while the action is running.
+9. Errors in `onOutput`, action steps, or channel transition resolvers are logged (`console.error`) and not rethrown.
+10. Returning unknown step or `void` does not change current step.
+11. `initialData` is shallow-copied at runner initialization.
 
 ## Pitfalls to avoid
 
@@ -303,6 +312,7 @@ UI steps emit events with:
 4. Mixing `view` and `action` in the same step.
 5. Returning transition targets that do not exist.
 6. Using static values in `channelTransitions`; each channel entry must be a resolver function.
+7. Assuming action steps auto-render a loading placeholder without configuring `render`.
 
 ## Next.js notes
 

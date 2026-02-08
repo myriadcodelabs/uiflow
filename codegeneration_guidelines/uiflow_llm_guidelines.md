@@ -13,7 +13,7 @@ You define:
 
 Two step types are supported:
 - UI step: `input + view + onOutput`
-- Action step: `input + action + onOutput`
+- Action step: `input + action + onOutput` (optional `render` policy)
 
 ## 2) Import rules
 
@@ -70,8 +70,11 @@ These details are required for correct generated code.
 13. Data is mutable inside steps; transitions force re-render by cloning `data` reference.
 14. If `onOutput` returns an unknown step name or `void`, FlowRunner stays on current step and re-renders.
 15. Step errors are logged (`console.error`) and not rethrown.
-16. Action steps render `"Processing..."` while busy.
-17. Channel transition resolver errors are logged (`console.error`) and runner falls back to re-rendering current step.
+16. Channel transition resolver errors are logged (`console.error`) and runner falls back to re-rendering current step.
+17. Action steps render `null` by default while busy.
+18. Action steps can optionally configure `render`:
+  - `mode: "preserve-previous"` keeps previous UI step rendered while action runs.
+  - `mode: "fallback"` renders provided fallback view while action runs.
 
 ## 5) Hard constraints for generated code
 
@@ -216,6 +219,7 @@ export const flow = defineFlow<Data>(
 8. Emitting flow outputs for no-op intents that do not change visible UI or meaningful flow state.
 9. Introducing extra orchestration layers (event buses/channels/wrappers) when a direct local handler is sufficient.
 10. Using static string values in `channelTransitions` (must be resolver functions).
+11. Assuming action steps auto-render a loading placeholder by default.
 
 ## 12) Generation checklist for agents
 

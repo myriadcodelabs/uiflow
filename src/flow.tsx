@@ -90,6 +90,26 @@ export interface UiStep<D extends FlowData = FlowData, I = any, O = any> {
     onOutput: (data: D, output: O, events?: EventChannels) => string | void | Promise<string | void>;
 }
 
+export type ActionRenderMode = "preserve-previous" | "fallback";
+
+export interface ActionFallbackViewProps<
+    D extends FlowData = FlowData,
+    I = any
+> {
+    input: I;
+    data: D;
+    events?: EventChannels;
+    step: string;
+    busy: boolean;
+}
+
+export type ActionRenderConfig<D extends FlowData = FlowData, I = any> =
+    | { mode: "preserve-previous" }
+    | {
+        mode: "fallback";
+        view: React.ComponentType<ActionFallbackViewProps<D, I>>;
+    };
+
 /**
  * Action (logic) step:
  * - Prepares `args` from `data`
@@ -101,6 +121,13 @@ export interface ActionStep<D extends FlowData = FlowData, I = any, O = any> {
     input: (data: D, events?: EventChannels) => I;
     action: (input: I, data: D, events?: EventChannels) => O | Promise<O>;
     onOutput: (data: D, output: O, events?: EventChannels) => string | void | Promise<string | void>;
+    /**
+     * Optional action-time render behavior.
+     * - preserve-previous: keep previous UI step rendered while action runs.
+     * - fallback: render the provided fallback view while action runs.
+     * If omitted, action step renders nothing by default.
+     */
+    render?: ActionRenderConfig<D, I>;
 }
 
 /**
@@ -265,6 +292,7 @@ export function FlowRunner<D extends FlowData = FlowData>(
 
     const [busy, setBusy] = useState(false); // for action steps
     const isMountedRef = useRef(true);
+    const previousUiStepRef = useRef<string | undefined>(undefined);
 
     // NEW:
     // This state is never used directly.
@@ -345,6 +373,10 @@ export function FlowRunner<D extends FlowData = FlowData>(
     // If the step is an action (no view), run it in an effect.
     const isActionStep = (step as any).action && !(step as any).view;
 
+    if (!isActionStep && step && (step as any).view) {
+        previousUiStepRef.current = currentStep;
+    }
+
     useEffect(() => {
         if (!isActionStep) return;
 
@@ -384,13 +416,47 @@ export function FlowRunner<D extends FlowData = FlowData>(
     // -----------------------
     // ACTION STEP HANDLING
     // -----------------------
-
-
-
-    // If it's an action step, show a simple placeholder or nothing.
     if (isActionStep) {
-        // You can customize this: spinner, skeleton, etc.
-        return <div>{busy ? "Processing..." : null}</div>;
+        const actionStep = step as ActionStep<D, any, any>;
+        const actionRender = actionStep.render;
+        if (actionRender?.mode === "preserve-previous") {
+            const previousUiStepName = previousUiStepRef.current;
+            const previousStep = previousUiStepName
+                ? flow.steps[previousUiStepName]
+                : undefined;
+            const isPreviousUiStep = !!previousStep && !!(previousStep as any).view;
+
+            if (isPreviousUiStep) {
+                const uiStep = previousStep as UiStep<D, any, any>;
+                const ViewComponent = uiStep.view;
+                const input = uiStep.input(data, resolvedEventChannels);
+
+                const outputHandle: OutputHandle<any> = {
+                    emit: () => {
+                        // While action is active, previous view stays visual-only.
+                    },
+                };
+
+                return <ViewComponent input={input} output={outputHandle} />;
+            }
+        }
+
+        if (actionRender && actionRender.mode === "fallback") {
+            const FallbackView = actionRender.view;
+            const input = actionStep.input(data, resolvedEventChannels);
+            return (
+                <FallbackView
+                    input={input}
+                    data={data}
+                    events={resolvedEventChannels}
+                    step={currentStep}
+                    busy={busy}
+                />
+            );
+        }
+
+        // Default action rendering behavior is intentionally empty.
+        return null;
     }
 
     // -----------------------
