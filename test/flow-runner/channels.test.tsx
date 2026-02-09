@@ -11,7 +11,7 @@ describe("FlowRunner channels", () => {
         const flow = defineFlow<Data>(
             {
                 watch: {
-                    input: (_, events) => ({ value: `count:${events?.counter.get() ?? -1}` }),
+                    input: (_, events) => ({ value: `count:${events?.counter?.get() ?? -1}` }),
                     view: DisplayView,
                     onOutput: () => {},
                 },
@@ -36,7 +36,7 @@ describe("FlowRunner channels", () => {
         const flow = defineFlow<Data>(
             {
                 watch: {
-                    input: (_, events) => ({ value: `count:${events?.counter.get() ?? -1}` }),
+                    input: (_, events) => ({ value: `count:${events?.counter?.get() ?? -1}` }),
                     view: DisplayView,
                     onOutput: () => {},
                 },
@@ -74,7 +74,7 @@ describe("FlowRunner channels", () => {
         const flow = defineFlow<Data>(
             {
                 watch: {
-                    input: (_, events) => ({ value: `count:${events?.counter.get() ?? -1}` }),
+                    input: (_, events) => ({ value: `count:${events?.counter?.get() ?? -1}` }),
                     view: DisplayView,
                     onOutput: () => {},
                 },
@@ -116,7 +116,7 @@ describe("FlowRunner channels", () => {
         const flow = defineFlow<Data>(
             {
                 watch: {
-                    input: (_, events) => ({ value: `count:${events?.counter.get() ?? -1}` }),
+                    input: (_, events) => ({ value: `count:${events?.counter?.get() ?? -1}` }),
                     view: DisplayView,
                     onOutput: () => {},
                 },
@@ -200,7 +200,7 @@ describe("FlowRunner channels", () => {
                 start: "idle",
                 channelTransitions: {
                     refresh: ({ events }) =>
-                        (events?.refresh.get() ?? 0) >= 2 ? "refreshed" : undefined,
+                        (events?.refresh?.get() ?? 0) >= 2 ? "refreshed" : undefined,
                 },
             }
         );

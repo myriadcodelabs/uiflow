@@ -37,7 +37,9 @@ Creates a shared channel object:
 - Throws if `start` is missing or not present in `steps`.
 - Supports optional `channelTransitions` map (`channel key -> transition`).
 - Each transition is a resolver function returning `nextStep | void` (sync or async) with context `{ data, currentStep, events, channelKey }`.
-- Returns `{ steps, start, channelTransitions? }`.
+- Supports optional `createInitialData()` for flow-local defaults.
+- Supports optional `normalizeInitialData(data)` to normalize either caller-provided or flow-created initial data.
+- Returns `{ steps, start, channelTransitions?, createInitialData?, normalizeInitialData? }`.
 
 ### `FlowRunner`
 
@@ -47,7 +49,7 @@ Creates a shared channel object:
 
 Props:
 - `flow`: result of `defineFlow`
-- `initialData`: mutable shared data for this flow instance
+- `initialData` (optional): mutable shared data for this flow instance
 - `eventChannels` (optional): shared channels
 - `eventChannelsStrategy` (optional): `"sticky"` (default) or `"replace"`
 
@@ -75,6 +77,10 @@ These details are required for correct generated code.
 18. Action steps can optionally configure `render`:
   - `mode: "preserve-previous"` keeps previous UI step rendered while action runs.
   - `mode: "fallback"` renders provided fallback view while action runs.
+19. Flow initialization order is:
+  - use `FlowRunner.initialData` when provided; otherwise use `flow.createInitialData()` when available.
+  - throw when neither source exists.
+  - apply `flow.normalizeInitialData(...)` when defined.
 
 ## 5) Hard constraints for generated code
 
@@ -282,6 +288,8 @@ Goal:
 Rules:
 - Prefer the smallest implementation that satisfies requirements and remains readable.
 - Do not add channels, event buses, or helper layers unless there is a concrete need (cross-flow coordination, shared subscriptions, replacement semantics, or lifecycle ownership requirements).
+- Keep action/UI flags localized inside flow-managed state (prefer step-scoped `ui` state such as `data.ui.<stepName>.*`) rather than extending `FlowRunner` with app-specific flags/messages.
+- Do not require callers to pass step UI flags/messages via `FlowRunner.initialData`; define defaults in `defineFlow` using `createInitialData()` (and optional `normalizeInitialData(...)`), then maintain flags through step logic.
 - If a local UI handler can perform a non-stateful side effect safely, prefer that over extra orchestration.
 - Reuse established simple patterns already present in the codebase unless there is a documented reason to diverge.
 

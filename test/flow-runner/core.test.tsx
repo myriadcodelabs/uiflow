@@ -6,6 +6,66 @@ import { defineFlow, FlowRunner } from "../../src/flow";
 import { ButtonView, DisplayView } from "../helpers";
 
 describe("FlowRunner core", () => {
+    it("uses flow createInitialData when FlowRunner initialData is omitted", async () => {
+        type Data = { value: string };
+        const flow = defineFlow<Data>(
+            {
+                show: {
+                    input: (data) => ({ value: data.value }),
+                    view: DisplayView,
+                    onOutput: () => {},
+                },
+            },
+            {
+                start: "show",
+                createInitialData: () => ({ value: "from-flow" }),
+            }
+        );
+
+        render(<FlowRunner flow={flow} />);
+        expect(await screen.findByText("from-flow")).toBeInTheDocument();
+    });
+
+    it("applies normalizeInitialData to provided FlowRunner initialData", async () => {
+        type Data = { value: string };
+        const flow = defineFlow<Data>(
+            {
+                show: {
+                    input: (data) => ({ value: data.value }),
+                    view: DisplayView,
+                    onOutput: () => {},
+                },
+            },
+            {
+                start: "show",
+                normalizeInitialData: (data) => ({ ...data, value: data.value.toUpperCase() }),
+            }
+        );
+
+        render(<FlowRunner flow={flow} initialData={{ value: "custom" }} />);
+        expect(await screen.findByText("CUSTOM")).toBeInTheDocument();
+    });
+
+    it("throws when neither FlowRunner initialData nor flow createInitialData is provided", () => {
+        type Data = { value: string };
+        const flow = defineFlow<Data>(
+            {
+                show: {
+                    input: (data) => ({ value: data.value }),
+                    view: DisplayView,
+                    onOutput: () => {},
+                },
+            },
+            {
+                start: "show",
+            }
+        );
+
+        expect(() => {
+            render(<FlowRunner flow={flow} />);
+        }).toThrow("FlowRunner: initialData is required unless flow.createInitialData is provided.");
+    });
+
     it("auto-runs action step and transitions", async () => {
         type Data = { value: number };
         const flow = defineFlow<Data>(

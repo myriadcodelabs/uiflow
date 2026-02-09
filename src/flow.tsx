@@ -155,6 +155,8 @@ export interface FlowDefinition<D extends FlowData = FlowData> {
     steps: FlowSteps<D>;
     start: string;
     channelTransitions?: Record<string, ChannelTransitionResolver<D>>;
+    createInitialData?: () => D;
+    normalizeInitialData?: (data: D) => D;
 }
 
 /**
@@ -168,6 +170,17 @@ export interface DefineFlowOptions<D extends FlowData = FlowData> {
      * that returns target step name (or void to stay).
      */
     channelTransitions?: Record<string, ChannelTransitionResolver<D>>;
+    /**
+     * Optional factory for flow-local default data.
+     * Use this to keep internal flow flags/state owned by the flow definition.
+     */
+    createInitialData?: () => D;
+    /**
+     * Optional normalizer applied to whichever data source is used:
+     * - caller-provided FlowRunner initialData, or
+     * - createInitialData() output
+     */
+    normalizeInitialData?: (data: D) => D;
 }
 
 /**
@@ -187,6 +200,8 @@ export function defineFlow<D extends FlowData = FlowData>(
         steps,
         start: options.start,
         channelTransitions: options.channelTransitions,
+        createInitialData: options.createInitialData,
+        normalizeInitialData: options.normalizeInitialData,
     };
 }
 
@@ -199,7 +214,7 @@ export function defineFlow<D extends FlowData = FlowData>(
 
 export interface FlowRunnerProps<D extends FlowData = FlowData> {
     flow: FlowDefinition<D>;
-    initialData: D;
+    initialData?: D;
 
     // NEW:
     // Optional map of shared channels.
@@ -284,10 +299,31 @@ export function FlowRunner<D extends FlowData = FlowData>(
 
     const resolvedEventChannels = getResolvedChannels();
 
+    const resolveInitialData = (): D => {
+        const provided = initialData;
+        let candidate: D;
+
+        if (provided !== undefined) {
+            candidate = provided;
+        } else if (flow.createInitialData) {
+            candidate = flow.createInitialData();
+        } else {
+            throw new Error(
+                "FlowRunner: initialData is required unless flow.createInitialData is provided."
+            );
+        }
+
+        if (flow.normalizeInitialData) {
+            return flow.normalizeInitialData(candidate);
+        }
+
+        return candidate;
+    };
+
     // We keep data and currentStep in state so React re-renders on change.
     const [state, setState] = useState<RunnerState<D>>({
         currentStep: flow.start,
-        data: { ...initialData },
+        data: { ...resolveInitialData() },
     });
 
     const [busy, setBusy] = useState(false); // for action steps
