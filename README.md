@@ -35,6 +35,14 @@ npm i @myriadcodelabs/uiflow
 yarn add @myriadcodelabs/uiflow
 ```
 
+LLM guidelines helper:
+- UIFlow attempts to copy `code_generation_guidelines/uiflow_llm_guidelines.md` into your project on install.
+- If install scripts are disabled in your environment, run:
+
+```bash
+npx @myriadcodelabs/uiflow install-guidelines
+```
+
 ## Imports
 
 ```ts

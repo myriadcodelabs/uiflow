@@ -1,12 +1,16 @@
 {
   "name": "@myriadcodelabs/uiflow",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Explicit, code-first UI flow orchestration for React.",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "rimraf dist",
-    "build": "pnpm run clean && tsc"
+    "build": "pnpm run clean && tsc",
+    "postinstall": "node scripts/install-guidelines.cjs"
+  },
+  "bin": {
+    "uiflow": "./scripts/uiflow-cli.cjs"
   },
   "keywords": [],
   "author": "Muhammad Ismail Khan",
@@ -29,7 +33,10 @@
   },
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "scripts/install-guidelines.cjs",
+    "scripts/uiflow-cli.cjs",
+    "code_generation_guidelines/uiflow_llm_guidelines.md"
   ],
   "main": "./dist/uiflow.js",
   "types": "./dist/uiflow.d.ts",
