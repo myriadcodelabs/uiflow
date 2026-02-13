@@ -36,10 +36,9 @@ Creates a shared channel object:
 ### `defineFlow(steps, { start })`
 - Throws if `start` is missing or not present in `steps`.
 - Supports optional `channelTransitions` map (`channel key -> transition`).
-- Each transition is a resolver function returning `nextStep | void` (sync or async) with context `{ data, currentStep, events, channelKey }`.
-- Supports optional `createInitialData()` for flow-local defaults.
-- Supports optional `normalizeInitialData(data)` to normalize either caller-provided or flow-created initial data.
-- Returns `{ steps, start, channelTransitions?, createInitialData?, normalizeInitialData? }`.
+- Each transition is a resolver function returning `nextStep | void` (sync or async) with context `{ domain, internal, currentStep, events, channelKey }`.
+- Supports optional `createInternalData()` for flow-owned internal defaults.
+- Returns `{ steps, start, channelTransitions?, createInternalData? }`.
 
 ### `FlowRunner`
 
@@ -49,7 +48,7 @@ Creates a shared channel object:
 
 Props:
 - `flow`: result of `defineFlow`
-- `initialData` (optional): mutable shared data for this flow instance
+- `initialData`: domain data for this flow instance
 - `eventChannels` (optional): shared channels
 - `eventChannelsStrategy` (optional): `"sticky"` (default) or `"replace"`
 
@@ -68,19 +67,19 @@ These details are required for correct generated code.
 9. Any channel `emit` triggers FlowRunner re-render.
 10. If `channelTransitions[channelKey]` is configured, channel `emit` evaluates resolver and transitions only when a valid step is returned.
 11. Resolver functions can inspect channel state via `events?.[channelKey]?.get()` to apply conditional logic.
-12. `initialData` is shallow-copied once at initialization (`data: { ...initialData }`).
-13. Data is mutable inside steps; transitions force re-render by cloning `data` reference.
-14. If `onOutput` returns an unknown step name or `void`, FlowRunner stays on current step and re-renders.
-15. Step errors are logged (`console.error`) and not rethrown.
-16. Channel transition resolver errors are logged (`console.error`) and runner falls back to re-rendering current step.
-17. Action steps render `null` by default while busy.
-18. Action steps can optionally configure `render`:
+12. `initialData` is shallow-copied once at initialization as domain data.
+13. Internal data is initialized from `createInternalData()` when provided; otherwise `{}`.
+14. Domain/internal data are mutable inside steps; transitions force re-render by cloning both references.
+15. If `onOutput` returns an unknown step name or `void`, FlowRunner stays on current step and re-renders.
+16. Step errors are logged (`console.error`) and not rethrown.
+17. Channel transition resolver errors are logged (`console.error`) and runner falls back to re-rendering current step.
+18. Action steps render `null` by default while busy.
+19. Action steps can optionally configure `render`:
   - `mode: "preserve-previous"` keeps previous UI step rendered while action runs.
   - `mode: "fallback"` renders provided fallback view while action runs.
-19. Flow initialization order is:
-  - use `FlowRunner.initialData` when provided; otherwise use `flow.createInitialData()` when available.
-  - throw when neither source exists.
-  - apply `flow.normalizeInitialData(...)` when defined.
+20. Flow initialization order is:
+  - `FlowRunner.initialData` initializes domain data.
+  - `createInternalData()` initializes internal data when defined; otherwise internal data starts as `{}`.
 
 ## 5) Hard constraints for generated code
 
@@ -239,6 +238,9 @@ When asked to implement a new flow, produce:
 6. No placeholders, no pseudocode, and no internal-path imports.
 7. No no-op transitions: each emitted output must either update rendered UI, update meaningful state, or trigger a required side-effect represented in state.
 
+No-domain-input pattern:
+- If a flow has no caller-provided domain input, use `type DomainData = {}` and pass `initialData={{}}` to `FlowRunner`.
+
 ## 13) Minimum quality bar
 
 Generated code must:
@@ -288,8 +290,8 @@ Goal:
 Rules:
 - Prefer the smallest implementation that satisfies requirements and remains readable.
 - Do not add channels, event buses, or helper layers unless there is a concrete need (cross-flow coordination, shared subscriptions, replacement semantics, or lifecycle ownership requirements).
-- Keep action/UI flags localized inside flow-managed state (prefer step-scoped `ui` state such as `data.ui.<stepName>.*`) rather than extending `FlowRunner` with app-specific flags/messages.
-- Do not require callers to pass step UI flags/messages via `FlowRunner.initialData`; define defaults in `defineFlow` using `createInitialData()` (and optional `normalizeInitialData(...)`), then maintain flags through step logic.
+- Keep action/UI flags localized inside flow internal state (prefer step-scoped `ui` state such as `internal.ui.<stepName>.*`) rather than extending `FlowRunner` with app-specific flags/messages.
+- Do not require callers to pass step UI flags/messages via `FlowRunner.initialData`; define defaults in `defineFlow` using `createInternalData()`, then maintain flags through step logic.
 - If a local UI handler can perform a non-stateful side effect safely, prefer that over extra orchestration.
 - Reuse established simple patterns already present in the codebase unless there is a documented reason to diverge.
 

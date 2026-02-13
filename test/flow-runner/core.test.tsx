@@ -6,80 +6,42 @@ import { defineFlow, FlowRunner } from "../../src/flow";
 import { ButtonView, DisplayView } from "../helpers";
 
 describe("FlowRunner core", () => {
-    it("uses flow createInitialData when FlowRunner initialData is omitted", async () => {
-        type Data = { value: string };
-        const flow = defineFlow<Data>(
+    it("uses flow createInternalData for internal state", async () => {
+        type Domain = { value: string };
+        type Internal = { suffix: string };
+        const flow = defineFlow<Domain, Internal>(
             {
                 show: {
-                    input: (data) => ({ value: data.value }),
+                    input: (domain, internal) => ({ value: `${domain.value}${internal.suffix}` }),
                     view: DisplayView,
                     onOutput: () => {},
                 },
             },
             {
                 start: "show",
-                createInitialData: () => ({ value: "from-flow" }),
+                createInternalData: () => ({ suffix: "-internal" }),
             }
         );
 
-        render(<FlowRunner flow={flow} />);
-        expect(await screen.findByText("from-flow")).toBeInTheDocument();
-    });
-
-    it("applies normalizeInitialData to provided FlowRunner initialData", async () => {
-        type Data = { value: string };
-        const flow = defineFlow<Data>(
-            {
-                show: {
-                    input: (data) => ({ value: data.value }),
-                    view: DisplayView,
-                    onOutput: () => {},
-                },
-            },
-            {
-                start: "show",
-                normalizeInitialData: (data) => ({ ...data, value: data.value.toUpperCase() }),
-            }
-        );
-
-        render(<FlowRunner flow={flow} initialData={{ value: "custom" }} />);
-        expect(await screen.findByText("CUSTOM")).toBeInTheDocument();
-    });
-
-    it("throws when neither FlowRunner initialData nor flow createInitialData is provided", () => {
-        type Data = { value: string };
-        const flow = defineFlow<Data>(
-            {
-                show: {
-                    input: (data) => ({ value: data.value }),
-                    view: DisplayView,
-                    onOutput: () => {},
-                },
-            },
-            {
-                start: "show",
-            }
-        );
-
-        expect(() => {
-            render(<FlowRunner flow={flow} />);
-        }).toThrow("FlowRunner: initialData is required unless flow.createInitialData is provided.");
+        render(<FlowRunner flow={flow} initialData={{ value: "from-flow" }} />);
+        expect(await screen.findByText("from-flow-internal")).toBeInTheDocument();
     });
 
     it("auto-runs action step and transitions", async () => {
-        type Data = { value: number };
-        const flow = defineFlow<Data>(
+        type Domain = { value: number };
+        type Internal = {};
+        const flow = defineFlow<Domain, Internal>(
             {
                 startAction: {
-                    input: (data) => ({ seed: data.value }),
-                    action: ({ seed }, data) => {
-                        data.value = seed + 1;
-                        return data.value;
+                    input: (domain) => ({ seed: domain.value }),
+                    action: ({ seed }, domain) => {
+                        domain.value = seed + 1;
+                        return domain.value;
                     },
                     onOutput: () => "done",
                 },
                 done: {
-                    input: (data) => ({ value: `v:${data.value}` }),
+                    input: (domain) => ({ value: `v:${domain.value}` }),
                     view: DisplayView,
                     onOutput: () => {},
                 },
@@ -92,13 +54,14 @@ describe("FlowRunner core", () => {
     });
 
     it("handles UI output emission and transitions", async () => {
-        type Data = { done: boolean };
-        const flow = defineFlow<Data>(
+        type Domain = { done: boolean };
+        type Internal = {};
+        const flow = defineFlow<Domain, Internal>(
             {
                 ask: {
                     input: () => ({ value: "ask", action: "go" as const }),
                     view: ButtonView,
-                    onOutput: (_, output) => {
+                    onOutput: (_domain, _internal, output) => {
                         if (output.action === "go") return "done";
                     },
                 },
@@ -118,15 +81,16 @@ describe("FlowRunner core", () => {
     });
 
     it("stays on same step when transition target is unknown", async () => {
-        type Data = { count: number };
-        const flow = defineFlow<Data>(
+        type Domain = { count: number };
+        type Internal = {};
+        const flow = defineFlow<Domain, Internal>(
             {
                 counter: {
-                    input: (data) => ({ value: `count:${data.count}`, action: "inc" as const }),
+                    input: (domain) => ({ value: `count:${domain.count}`, action: "inc" as const }),
                     view: ButtonView,
-                    onOutput: (data, output) => {
+                    onOutput: (domain, _internal, output) => {
                         if (output.action === "inc") {
-                            data.count += 1;
+                            domain.count += 1;
                             return "missingStep";
                         }
                     },
@@ -143,15 +107,16 @@ describe("FlowRunner core", () => {
     });
 
     it("stays on same step when onOutput returns void", async () => {
-        type Data = { count: number };
-        const flow = defineFlow<Data>(
+        type Domain = { count: number };
+        type Internal = {};
+        const flow = defineFlow<Domain, Internal>(
             {
                 counter: {
-                    input: (data) => ({ value: `count:${data.count}`, action: "inc" as const }),
+                    input: (domain) => ({ value: `count:${domain.count}`, action: "inc" as const }),
                     view: ButtonView,
-                    onOutput: (data, output) => {
+                    onOutput: (domain, _internal, output) => {
                         if (output.action === "inc") {
-                            data.count += 1;
+                            domain.count += 1;
                             return;
                         }
                     },

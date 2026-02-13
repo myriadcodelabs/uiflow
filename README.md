@@ -235,9 +235,8 @@ export function FlashcardsScreen({ deckId }: { deckId: string }) {
 ### `defineFlow(steps, { start })`
 - Validates `start` exists in `steps`.
 - Supports optional `channelTransitions` mapping (`channelKey -> resolver`).
-- A resolver receives `{ data, currentStep, events, channelKey }` and returns `nextStep | void` (sync/async).
-- Supports optional `createInitialData()` for flow-local default data.
-- Supports optional `normalizeInitialData(data)` to normalize either caller input or flow-created defaults.
+- A resolver receives `{ domain, internal, currentStep, events, channelKey }` and returns `nextStep | void` (sync/async).
+- Supports optional `createInternalData()` for flow-owned internal state defaults.
 - Returns flow definition consumed by `FlowRunner`.
 
 Example:
@@ -269,15 +268,13 @@ const flow = defineFlow(
 
 Props:
 - `flow`: flow definition
-- `initialData?`: optional mutable per-flow data object
+- `initialData`: required domain data object (caller-owned input)
 - `eventChannels?`: optional channels map
 - `eventChannelsStrategy?`: `"sticky"` (default) or `"replace"`
 
 Initialization behavior:
-- If `initialData` is provided, runner uses it.
-- Else runner uses `flow.createInitialData()` (if provided).
-- If neither exists, runner throws.
-- If `flow.normalizeInitialData` exists, it is applied to whichever data source is used.
+- Runner always uses `initialData` as domain data.
+- Runner initializes internal state from `flow.createInternalData()` when provided, otherwise `{}`.
 
 Action-step render policy:
 - Default: action step renders nothing while running.

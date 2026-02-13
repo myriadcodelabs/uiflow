@@ -33,7 +33,7 @@ export function ButtonView(props: ButtonViewProps) {
     );
 }
 
-export function SavingView(props: ActionFallbackViewProps<any, { value: string }>) {
+export function SavingView(props: ActionFallbackViewProps<any, any, { value: string }>) {
     return <div>{`saving:${props.input.value}`}</div>;
 }
 

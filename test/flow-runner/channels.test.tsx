@@ -11,7 +11,7 @@ describe("FlowRunner channels", () => {
         const flow = defineFlow<Data>(
             {
                 watch: {
-                    input: (_, events) => ({ value: `count:${events?.counter?.get() ?? -1}` }),
+                    input: (_domain, _internal, events) => ({ value: `count:${events?.counter?.get() ?? -1}` }),
                     view: DisplayView,
                     onOutput: () => {},
                 },
@@ -36,7 +36,7 @@ describe("FlowRunner channels", () => {
         const flow = defineFlow<Data>(
             {
                 watch: {
-                    input: (_, events) => ({ value: `count:${events?.counter?.get() ?? -1}` }),
+                    input: (_domain, _internal, events) => ({ value: `count:${events?.counter?.get() ?? -1}` }),
                     view: DisplayView,
                     onOutput: () => {},
                 },
@@ -74,7 +74,7 @@ describe("FlowRunner channels", () => {
         const flow = defineFlow<Data>(
             {
                 watch: {
-                    input: (_, events) => ({ value: `count:${events?.counter?.get() ?? -1}` }),
+                    input: (_domain, _internal, events) => ({ value: `count:${events?.counter?.get() ?? -1}` }),
                     view: DisplayView,
                     onOutput: () => {},
                 },
@@ -116,7 +116,7 @@ describe("FlowRunner channels", () => {
         const flow = defineFlow<Data>(
             {
                 watch: {
-                    input: (_, events) => ({ value: `count:${events?.counter?.get() ?? -1}` }),
+                    input: (_domain, _internal, events) => ({ value: `count:${events?.counter?.get() ?? -1}` }),
                     view: DisplayView,
                     onOutput: () => {},
                 },

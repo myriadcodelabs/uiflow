@@ -59,15 +59,22 @@ export function createFlowChannel<T>(initial: T): FlowChannel<T> {
  */
 export type FlowData = Record<string, any>;
 
-export interface ChannelTransitionContext<D extends FlowData = FlowData> {
-    data: D;
+export interface ChannelTransitionContext<
+    DD extends FlowData = FlowData,
+    ID extends FlowData = FlowData
+> {
+    domain: DD;
+    internal: ID;
     currentStep: string;
     events?: EventChannels;
     channelKey: string;
 }
 
-export type ChannelTransitionResolver<D extends FlowData = FlowData> =
-    (context: ChannelTransitionContext<D>) => string | void | Promise<string | void>;
+export type ChannelTransitionResolver<
+    DD extends FlowData = FlowData,
+    ID extends FlowData = FlowData
+> =
+    (context: ChannelTransitionContext<DD, ID>) => string | void | Promise<string | void>;
 
 /**
  * Output handle given to UI components.
@@ -84,30 +91,41 @@ export interface OutputHandle<O = any> {
  * - Receives `output` from the component via output.emit()
  * - `onOutput` decides next step and can mutate data
  */
-export interface UiStep<D extends FlowData = FlowData, I = any, O = any> {
-    input: (data: D, events?: EventChannels) => I;
+export interface UiStep<
+    DD extends FlowData = FlowData,
+    ID extends FlowData = FlowData,
+    I = any,
+    O = any
+> {
+    input: (domain: DD, internal: ID, events?: EventChannels) => I;
     view: React.ComponentType<{ input: I; output: OutputHandle<O> }>;
-    onOutput: (data: D, output: O, events?: EventChannels) => string | void | Promise<string | void>;
+    onOutput: (domain: DD, internal: ID, output: O, events?: EventChannels) => string | void | Promise<string | void>;
 }
 
 export type ActionRenderMode = "preserve-previous" | "fallback";
 
 export interface ActionFallbackViewProps<
-    D extends FlowData = FlowData,
+    DD extends FlowData = FlowData,
+    ID extends FlowData = FlowData,
     I = any
 > {
     input: I;
-    data: D;
+    domain: DD;
+    internal: ID;
     events?: EventChannels;
     step: string;
     busy: boolean;
 }
 
-export type ActionRenderConfig<D extends FlowData = FlowData, I = any> =
+export type ActionRenderConfig<
+    DD extends FlowData = FlowData,
+    ID extends FlowData = FlowData,
+    I = any
+> =
     | { mode: "preserve-previous" }
     | {
         mode: "fallback";
-        view: React.ComponentType<ActionFallbackViewProps<D, I>>;
+        view: React.ComponentType<ActionFallbackViewProps<DD, ID, I>>;
     };
 
 /**
@@ -117,17 +135,22 @@ export type ActionRenderConfig<D extends FlowData = FlowData, I = any> =
  * - `onOutput` decides next step and can mutate data
  * - No UI
  */
-export interface ActionStep<D extends FlowData = FlowData, I = any, O = any> {
-    input: (data: D, events?: EventChannels) => I;
-    action: (input: I, data: D, events?: EventChannels) => O | Promise<O>;
-    onOutput: (data: D, output: O, events?: EventChannels) => string | void | Promise<string | void>;
+export interface ActionStep<
+    DD extends FlowData = FlowData,
+    ID extends FlowData = FlowData,
+    I = any,
+    O = any
+> {
+    input: (domain: DD, internal: ID, events?: EventChannels) => I;
+    action: (input: I, domain: DD, internal: ID, events?: EventChannels) => O | Promise<O>;
+    onOutput: (domain: DD, internal: ID, output: O, events?: EventChannels) => string | void | Promise<string | void>;
     /**
      * Optional action-time render behavior.
      * - preserve-previous: keep previous UI step rendered while action runs.
      * - fallback: render the provided fallback view while action runs.
      * If omitted, action step renders nothing by default.
      */
-    render?: ActionRenderConfig<D, I>;
+    render?: ActionRenderConfig<DD, ID, I>;
 }
 
 /**
@@ -136,60 +159,67 @@ export interface ActionStep<D extends FlowData = FlowData, I = any, O = any> {
  *  - an action step (has `action`)
  * but never both at the same time by convention.
  */
-export type FlowStep<D extends FlowData = FlowData> =
-    | UiStep<D, any, any>
-    | ActionStep<D, any, any>;
+export type FlowStep<
+    DD extends FlowData = FlowData,
+    ID extends FlowData = FlowData
+> =
+    | UiStep<DD, ID, any, any>
+    | ActionStep<DD, ID, any, any>;
 
 /**
  * Map of step names -> step definitions.
  */
-export type FlowSteps<D extends FlowData = FlowData> = Record<
+export type FlowSteps<
+    DD extends FlowData = FlowData,
+    ID extends FlowData = FlowData
+> = Record<
     string,
-    FlowStep<D>
+    FlowStep<DD, ID>
 >;
 
 /**
  * Flow definition object returned by defineFlow.
  */
-export interface FlowDefinition<D extends FlowData = FlowData> {
-    steps: FlowSteps<D>;
+export interface FlowDefinition<
+    DD extends FlowData = FlowData,
+    ID extends FlowData = FlowData
+> {
+    steps: FlowSteps<DD, ID>;
     start: string;
-    channelTransitions?: Record<string, ChannelTransitionResolver<D>>;
-    createInitialData?: () => D;
-    normalizeInitialData?: (data: D) => D;
+    channelTransitions?: Record<string, ChannelTransitionResolver<DD, ID>>;
+    createInternalData?: () => ID;
 }
 
 /**
  * Options when defining a flow.
  */
-export interface DefineFlowOptions<D extends FlowData = FlowData> {
+export interface DefineFlowOptions<
+    DD extends FlowData = FlowData,
+    ID extends FlowData = FlowData
+> {
     start: string;
     /**
      * Optional channel transition mapping.
      * Each channel key maps to a resolver function with conditional logic
      * that returns target step name (or void to stay).
      */
-    channelTransitions?: Record<string, ChannelTransitionResolver<D>>;
+    channelTransitions?: Record<string, ChannelTransitionResolver<DD, ID>>;
     /**
-     * Optional factory for flow-local default data.
-     * Use this to keep internal flow flags/state owned by the flow definition.
+     * Optional factory for flow-owned internal state.
      */
-    createInitialData?: () => D;
-    /**
-     * Optional normalizer applied to whichever data source is used:
-     * - caller-provided FlowRunner initialData, or
-     * - createInitialData() output
-     */
-    normalizeInitialData?: (data: D) => D;
+    createInternalData?: () => ID;
 }
 
 /**
  * Main entry point to define a flow.
  */
-export function defineFlow<D extends FlowData = FlowData>(
-    steps: FlowSteps<D>,
-    options: DefineFlowOptions<D>
-): FlowDefinition<D> {
+export function defineFlow<
+    DD extends FlowData = FlowData,
+    ID extends FlowData = FlowData
+>(
+    steps: FlowSteps<DD, ID>,
+    options: DefineFlowOptions<DD, ID>
+): FlowDefinition<DD, ID> {
     if (!options.start || !steps[options.start]) {
         throw new Error(
             `defineFlow: 'start' must be provided and exist in steps. Got '${options.start}'.`
@@ -200,8 +230,7 @@ export function defineFlow<D extends FlowData = FlowData>(
         steps,
         start: options.start,
         channelTransitions: options.channelTransitions,
-        createInitialData: options.createInitialData,
-        normalizeInitialData: options.normalizeInitialData,
+        createInternalData: options.createInternalData,
     };
 }
 
@@ -212,9 +241,9 @@ export function defineFlow<D extends FlowData = FlowData>(
 // FlowRunner component
 // -----------------------------
 
-export interface FlowRunnerProps<D extends FlowData = FlowData> {
-    flow: FlowDefinition<D>;
-    initialData?: D;
+export interface FlowRunnerProps<DD extends FlowData = FlowData, ID extends FlowData = FlowData> {
+    flow: FlowDefinition<DD, ID>;
+    initialData: DD;
 
     // NEW:
     // Optional map of shared channels.
@@ -234,9 +263,10 @@ export interface FlowRunnerProps<D extends FlowData = FlowData> {
  * - current step name
  * - data (mutable but we keep it in React state for re-rendering)
  */
-interface RunnerState<D extends FlowData> {
+interface RunnerState<DD extends FlowData, ID extends FlowData> {
     currentStep: string;
-    data: D;
+    domain: DD;
+    internal: ID;
 }
 
 
@@ -246,8 +276,11 @@ interface RunnerState<D extends FlowData> {
  * - manages transitions
  * - renders UI steps
  */
-export function FlowRunner<D extends FlowData = FlowData>(
-    props: Readonly<FlowRunnerProps<D>>
+export function FlowRunner<
+    DD extends FlowData = FlowData,
+    ID extends FlowData = FlowData
+>(
+    props: Readonly<FlowRunnerProps<DD, ID>>
 ) {
     const {
         flow,
@@ -299,31 +332,18 @@ export function FlowRunner<D extends FlowData = FlowData>(
 
     const resolvedEventChannels = getResolvedChannels();
 
-    const resolveInitialData = (): D => {
-        const provided = initialData;
-        let candidate: D;
-
-        if (provided !== undefined) {
-            candidate = provided;
-        } else if (flow.createInitialData) {
-            candidate = flow.createInitialData();
-        } else {
-            throw new Error(
-                "FlowRunner: initialData is required unless flow.createInitialData is provided."
-            );
+    const resolveInternalData = (): ID => {
+        if (flow.createInternalData) {
+            return flow.createInternalData();
         }
-
-        if (flow.normalizeInitialData) {
-            return flow.normalizeInitialData(candidate);
-        }
-
-        return candidate;
+        return {} as ID;
     };
 
     // We keep data and currentStep in state so React re-renders on change.
-    const [state, setState] = useState<RunnerState<D>>({
+    const [state, setState] = useState<RunnerState<DD, ID>>({
         currentStep: flow.start,
-        data: { ...resolveInitialData() },
+        domain: { ...initialData },
+        internal: { ...resolveInternalData() },
     });
 
     const [busy, setBusy] = useState(false); // for action steps
@@ -335,7 +355,7 @@ export function FlowRunner<D extends FlowData = FlowData>(
     // It only exists to force a re-render when event channels change.
     const [_tick, setTick] = useState(0);
 
-    const { currentStep, data } = state;
+    const { currentStep, domain, internal } = state;
 
     const applyTransition = (nextStepName?: string | void) => {
         if (!isMountedRef.current) return;
@@ -344,13 +364,15 @@ export function FlowRunner<D extends FlowData = FlowData>(
             setState((prev) => ({
                 ...prev,
                 currentStep: nextStepName,
-                data: { ...prev.data }, // new reference to trigger React updates (memo-safe)
+                domain: { ...prev.domain }, // new references to trigger React updates (memo-safe)
+                internal: { ...prev.internal },
             }));
         } else {
             // no next step: just re-render with updated data if any
             setState((prev) => ({
                 ...prev,
-                data: { ...prev.data },
+                domain: { ...prev.domain },
+                internal: { ...prev.internal },
             }));
         }
     };
@@ -364,7 +386,8 @@ export function FlowRunner<D extends FlowData = FlowData>(
 
         try {
             const nextStep = await transition({
-                data,
+                domain,
+                internal,
                 currentStep,
                 events: resolvedEventChannels,
                 channelKey,
@@ -416,14 +439,14 @@ export function FlowRunner<D extends FlowData = FlowData>(
     useEffect(() => {
         if (!isActionStep) return;
 
-        const actionStep = step as ActionStep<D, any, any>;
+        const actionStep = step as ActionStep<DD, ID, any, any>;
 
         (async () => {
             try {
                 setBusy(true);
-                const input = actionStep.input(state.data, resolvedEventChannels);
-                const output = await actionStep.action(input, state.data, resolvedEventChannels);
-                const next = await actionStep.onOutput(state.data, output, resolvedEventChannels);
+                const input = actionStep.input(state.domain, state.internal, resolvedEventChannels);
+                const output = await actionStep.action(input, state.domain, state.internal, resolvedEventChannels);
+                const next = await actionStep.onOutput(state.domain, state.internal, output, resolvedEventChannels);
                 applyTransition(next);
             } catch (e) {
                 console.error("FlowRunner action step error:", e);
@@ -453,7 +476,7 @@ export function FlowRunner<D extends FlowData = FlowData>(
     // ACTION STEP HANDLING
     // -----------------------
     if (isActionStep) {
-        const actionStep = step as ActionStep<D, any, any>;
+        const actionStep = step as ActionStep<DD, ID, any, any>;
         const actionRender = actionStep.render;
         if (actionRender?.mode === "preserve-previous") {
             const previousUiStepName = previousUiStepRef.current;
@@ -463,9 +486,9 @@ export function FlowRunner<D extends FlowData = FlowData>(
             const isPreviousUiStep = !!previousStep && !!(previousStep as any).view;
 
             if (isPreviousUiStep) {
-                const uiStep = previousStep as UiStep<D, any, any>;
+                const uiStep = previousStep as UiStep<DD, ID, any, any>;
                 const ViewComponent = uiStep.view;
-                const input = uiStep.input(data, resolvedEventChannels);
+                const input = uiStep.input(domain, internal, resolvedEventChannels);
 
                 const outputHandle: OutputHandle<any> = {
                     emit: () => {
@@ -479,11 +502,12 @@ export function FlowRunner<D extends FlowData = FlowData>(
 
         if (actionRender && actionRender.mode === "fallback") {
             const FallbackView = actionRender.view;
-            const input = actionStep.input(data, resolvedEventChannels);
+            const input = actionStep.input(domain, internal, resolvedEventChannels);
             return (
                 <FallbackView
                     input={input}
-                    data={data}
+                    domain={domain}
+                    internal={internal}
                     events={resolvedEventChannels}
                     step={currentStep}
                     busy={busy}
@@ -499,14 +523,14 @@ export function FlowRunner<D extends FlowData = FlowData>(
     // UI STEP HANDLING
     // -----------------------
 
-    const uiStep = step as UiStep<D, any, any>;
+    const uiStep = step as UiStep<DD, ID, any, any>;
     const ViewComponent = uiStep.view;
-    const input = uiStep.input(data, resolvedEventChannels);
+    const input = uiStep.input(domain, internal, resolvedEventChannels);
 
     const outputHandle: OutputHandle<any> = {
         emit: async (output) => {
             try {
-                const next = await uiStep.onOutput(data, output, resolvedEventChannels);
+                const next = await uiStep.onOutput(domain, internal, output, resolvedEventChannels);
                 applyTransition(next);
             } catch (e) {
                 console.error("FlowRunner UI step onOutput error:", e);
