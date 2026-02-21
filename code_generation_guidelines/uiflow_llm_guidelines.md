@@ -168,31 +168,37 @@ type Props = {
 ```ts
 import { defineFlow } from "@myriadcodelabs/uiflow";
 
-type Data = {
+type DomainData = {
   deckId: string;
+};
+
+type InternalData = {
   cards: CardState[];
   activeCardId: string | null;
 };
 
-export const flow = defineFlow<Data>(
+export const flow = defineFlow<DomainData, InternalData>(
   {
     fetchCards: {
-      input: (data) => ({ deckId: data.deckId }),
-      action: async ({ deckId }, data) => {
+      input: (domain) => ({ deckId: domain.deckId }),
+      action: async ({ deckId }, _domain, internal) => {
         const cards = await fetchCardsAction(deckId);
-        data.cards = cards ?? [];
-        data.activeCardId = null;
+        internal.cards = cards ?? [];
+        internal.activeCardId = null;
         return { ok: true };
       },
       onOutput: () => "study",
     },
 
     study: {
-      input: (data) => ({ cards: data.cards, activeCardId: data.activeCardId }),
+      input: (_domain, internal) => ({
+        cards: internal.cards,
+        activeCardId: internal.activeCardId,
+      }),
       view: StudyView,
-      onOutput: (data, output, events) => {
+      onOutput: (_domain, internal, output, events) => {
         if (output.action === "flip") {
-          data.activeCardId = output.cardId;
+          internal.activeCardId = output.cardId;
           return "study";
         }
         if (output.action === "next") {
@@ -202,7 +208,13 @@ export const flow = defineFlow<Data>(
       },
     },
   },
-  { start: "fetchCards" }
+  {
+    start: "fetchCards",
+    createInternalData: () => ({
+      cards: [],
+      activeCardId: null,
+    }),
+  }
 );
 ```
 
