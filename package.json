@@ -1,6 +1,6 @@
 {
   "name": "@myriadcodelabs/uiflow",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Explicit, code-first UI flow orchestration for React.",
   "scripts": {
     "test": "vitest run",
