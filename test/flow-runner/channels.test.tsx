@@ -1,8 +1,9 @@
 import React from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { createFlowChannel, defineFlow, FlowRunner } from "../../src/flow";
-import { DisplayView, createTrackedChannel } from "../helpers";
+import { ButtonView, DisplayView, createTrackedChannel } from "../helpers";
 
 describe("FlowRunner channels", () => {
     it("re-renders when subscribed channel emits", async () => {
@@ -216,6 +217,49 @@ describe("FlowRunner channels", () => {
         act(() => {
             refresh.emit((n) => n + 1);
         });
+        expect(await screen.findByText("refreshed")).toBeInTheDocument();
+    });
+
+    it("uses the latest currentStep inside channelTransitions after normal step changes", async () => {
+        type Data = {};
+        const refresh = createFlowChannel<number>(0);
+        const flow = defineFlow<Data>(
+            {
+                idle: {
+                    input: () => ({ value: "idle", action: "go" as const }),
+                    view: ButtonView,
+                    onOutput: () => "ready",
+                },
+                ready: {
+                    input: () => ({ value: "ready" }),
+                    view: DisplayView,
+                    onOutput: () => {},
+                },
+                refreshed: {
+                    input: () => ({ value: "refreshed" }),
+                    view: DisplayView,
+                    onOutput: () => {},
+                },
+            },
+            {
+                start: "idle",
+                channelTransitions: {
+                    refresh: ({ currentStep }) => (currentStep === "ready" ? "refreshed" : undefined),
+                },
+            }
+        );
+
+        const user = userEvent.setup();
+        render(<FlowRunner flow={flow} initialData={{}} eventChannels={{ refresh }} />);
+
+        expect(screen.getByText("idle")).toBeInTheDocument();
+        await user.click(screen.getByRole("button", { name: "trigger" }));
+        expect(await screen.findByText("ready")).toBeInTheDocument();
+
+        act(() => {
+            refresh.emit((n) => n + 1);
+        });
+
         expect(await screen.findByText("refreshed")).toBeInTheDocument();
     });
 });

@@ -143,7 +143,33 @@ Cross-flow communication pattern:
 - One flow emits to channel (`events?.studiedCounter.emit(...)`).
 - Another flow reads channel in `input` (`events?.studiedCounter.get()`).
 
-## 8) Output typing pattern
+## 8) Flow boundaries and composition (Mandatory)
+
+Goal:
+- Keep flows cohesive, readable, and maintainable by splitting when structure or ownership diverges.
+
+Rules:
+- A flow should model one user journey or cohesive task, not an entire feature area.
+- Split flows when steps belong to different domain ownership or invariants.
+- Split flows when UI is reused across routes or features.
+- Split flows when the flow exceeds ~6–8 steps or contains distinct modes that rarely share state.
+- Prefer parent/child composition when a sub-UI becomes stateful.
+- Parent flow orchestrates higher-level navigation/sequence.
+- Child flow owns localized UI state and action sequencing.
+- Avoid “mega-flows” that mix unrelated responsibilities; splitting is preferred over adding more steps.
+
+## 9) Cross-flow communication via channels (Mandatory)
+
+Goal:
+- Coordinate state/events between flows without prop drilling or global stores.
+
+Rules:
+- Use channels whenever multiple flows need to coordinate or share state/events.
+- The parent component owns channel instances and passes them via `eventChannels`.
+- Child flows access channels via `events?.channelName.get()` and emit via `events?.channelName.emit(...)`.
+- Default to `eventChannelsStrategy="sticky"` unless replacement semantics are explicitly required.
+
+## 10) Output typing pattern
 
 Use discriminated unions:
 
@@ -163,7 +189,7 @@ type Props = {
 };
 ```
 
-## 9) Step template to follow
+## 11) Step template to follow
 
 ```ts
 import { defineFlow } from "@myriadcodelabs/uiflow";
@@ -218,13 +244,13 @@ export const flow = defineFlow<DomainData, InternalData>(
 );
 ```
 
-## 10) Next.js guidance
+## 12) Next.js guidance
 
 - Add `"use client"` to UI step view files.
 - `FlowRunner` usage belongs in client components.
 - Server actions can be called inside action steps, as in flashcards.
 
-## 11) Common mistakes to reject
+## 13) Common mistakes to reject
 
 1. Importing from `@myriadcodelabs/uiflow/dist/*` in app code.
 2. Using `output.done(...)` (correct method is `output.emit(...)`).
@@ -238,7 +264,7 @@ export const flow = defineFlow<DomainData, InternalData>(
 10. Using static string values in `channelTransitions` (must be resolver functions).
 11. Assuming action steps auto-render a loading placeholder by default.
 
-## 12) Generation checklist for agents
+## 14) Generation checklist for agents
 
 When asked to implement a new flow, produce:
 
@@ -253,7 +279,7 @@ When asked to implement a new flow, produce:
 No-domain-input pattern:
 - If a flow has no caller-provided domain input, use `type DomainData = {}` and pass `initialData={{}}` to `FlowRunner`.
 
-## 13) Minimum quality bar
+## 15) Minimum quality bar
 
 Generated code must:
 - compile in TypeScript
@@ -261,7 +287,7 @@ Generated code must:
 - keep view components declarative and dumb
 - avoid runtime channel/reference pitfalls described above
 
-## 14) Default Policy (Mandatory)
+## 16) Default Policy (Mandatory)
 
 For all new route or feature logic, code agents MUST use UIFlow as the default implementation model, regardless of UI or logic complexity.
 
@@ -277,7 +303,7 @@ Allowed exceptions (only):
 
 If an exception is used, the agent must state the reason explicitly in its response.
 
-## 15) Render Discipline (Mandatory)
+## 17) Render Discipline (Mandatory)
 
 Goal:
 - Trigger flow transitions and FlowRunner re-renders only when there is a user-visible UI change or a meaningful flow-state change required for UX.
@@ -294,7 +320,7 @@ Rules:
 Decision test before adding an output transition:
 - If this click did nothing except re-render the same UI, do not emit a flow output for it.
 
-## 16) Simplicity First (Mandatory)
+## 18) Simplicity First (Mandatory)
 
 Goal:
 - Use UIFlow to simplify control flow, not to add abstraction overhead.

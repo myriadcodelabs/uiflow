@@ -2,7 +2,7 @@ import React from "react";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { defineFlow, FlowRunner } from "../../src/flow";
+import { createFlowChannel, defineFlow, FlowRunner } from "../../src/flow";
 import { ButtonView, DisplayView, SavingView, createDeferred } from "../helpers";
 
 describe("FlowRunner action render", () => {
@@ -133,5 +133,56 @@ describe("FlowRunner action render", () => {
         });
 
         expect(await screen.findByText("done")).toBeInTheDocument();
+    });
+
+    it("ignores late completion from an outdated action step after the flow already moved on", async () => {
+        type Data = { value: string };
+        const save = createDeferred<void>();
+        const cancel = createFlowChannel<number>(0);
+        const flow = defineFlow<Data>(
+            {
+                saving: {
+                    input: (data) => ({ value: data.value }),
+                    action: async (_input, data) => {
+                        await save.promise;
+                        data.value = "saved";
+                        return { ok: true };
+                    },
+                    onOutput: () => "done",
+                    render: { mode: "fallback", view: SavingView },
+                },
+                cancelled: {
+                    input: () => ({ value: "cancelled" }),
+                    view: DisplayView,
+                    onOutput: () => {},
+                },
+                done: {
+                    input: (data) => ({ value: data.value }),
+                    view: DisplayView,
+                    onOutput: () => {},
+                },
+            },
+            {
+                start: "saving",
+                channelTransitions: {
+                    cancel: () => "cancelled",
+                },
+            }
+        );
+
+        render(<FlowRunner flow={flow} initialData={{ value: "start" }} eventChannels={{ cancel }} />);
+        expect(screen.getByText("saving:start")).toBeInTheDocument();
+
+        act(() => {
+            cancel.emit((n) => n + 1);
+        });
+        expect(await screen.findByText("cancelled")).toBeInTheDocument();
+
+        await act(async () => {
+            save.resolve();
+            await save.promise;
+        });
+
+        expect(screen.getByText("cancelled")).toBeInTheDocument();
     });
 });

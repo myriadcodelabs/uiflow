@@ -356,6 +356,11 @@ export function FlowRunner<
     const [_tick, setTick] = useState(0);
 
     const { currentStep, domain, internal } = state;
+    const latestStateRef = useRef<RunnerState<DD, ID>>(state);
+    const latestChannelsRef = useRef<EventChannels | undefined>(resolvedEventChannels);
+
+    latestStateRef.current = state;
+    latestChannelsRef.current = resolvedEventChannels;
 
     const applyTransition = (nextStepName?: string | void) => {
         if (!isMountedRef.current) return;
@@ -385,11 +390,13 @@ export function FlowRunner<
         }
 
         try {
+            const latestState = latestStateRef.current;
+            const latestChannels = latestChannelsRef.current;
             const nextStep = await transition({
-                domain,
-                internal,
-                currentStep,
-                events: resolvedEventChannels,
+                domain: latestState.domain,
+                internal: latestState.internal,
+                currentStep: latestState.currentStep,
+                events: latestChannels,
                 channelKey,
             });
             if (nextStep) {
