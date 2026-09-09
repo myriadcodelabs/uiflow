@@ -146,43 +146,37 @@ Cross-flow communication pattern:
 ## 8) Flow boundaries and composition (Mandatory)
 
 Goal:
-- Keep flows cohesive, readable, and maintainable by splitting when structure or ownership diverges.
+- Keep qualifying flows cohesive, readable, and maintainable by splitting when structure or ownership diverges.
 
 Rules:
 - A flow should model one user journey or cohesive task, not an entire feature area.
 - Split flows when steps belong to different domain ownership or invariants.
 - Split flows when UI is reused across routes or features.
-- Split flows when the flow exceeds ~6–8 steps or contains distinct modes that rarely share state.
-- Default to parent/child composition when one visible UI contains many moving parts, many intents, or dense local interaction states.
-- Parent flow should keep a stable screen-level or region-level step and render child `FlowRunner` instances inside that parent view component when localized workflows become dense.
-- Parent flow orchestrates higher-level navigation, selection, layout mode, and shared feature state.
-- Child flow owns localized UI state and action sequencing such as editing, creating, confirming, saving, deleting, retrying, or modal/panel-local interactions.
-- When multiple intents belong to the same overall screen but not the same local interaction loop, do not flatten them into one mega-flow by default; split them into child flows rendered inside the parent UI.
-- Nested `FlowRunner` usage inside a parent step's React component is a preferred composition pattern, not an edge case.
-- Prefer child flows over ad hoc partial UI injection. Use partial/shell composition only for layout slots or stable chrome around child flows.
-- Avoid “mega-flows” that mix unrelated responsibilities; splitting is preferred over adding more steps.
-
-Default code generation behavior:
-- When generating new UIFlow code for a feature with one cohesive screen and several sub-intents, create a parent flow plus child flows by default instead of a single flat flow.
-- Keep the parent step visually cohesive. The parent view may render list/detail panes, forms, panels, or modals, and may host child `FlowRunner` instances inside those regions.
-- Only keep all intents in one flow when the interactions truly share one small local state machine and remain readable.
+- Split flows when the flow exceeds ~6–8 meaningful steps or contains distinct modes that rarely share state.
+- Use parent/child flow composition when both the parent and localized child have genuine orchestration responsibilities.
+- Parent flow may own higher-level navigation, selection, layout mode, or shared feature sequencing.
+- Child flow may own a localized multi-state sequence such as edit → save → retry/success, creation wizard steps, or confirm → execute → result.
+- Do not create child flows for ordinary local UI state such as open/close, field values, selected tabs, or other direct component interactions.
+- Nested `FlowRunner` usage inside a parent step's React component is valid when the nested workflow independently qualifies for UIFlow; it is not a requirement for every complex-looking screen.
+- Avoid mega-flows that mix unrelated responsibilities, but do not replace a mega-flow with many ceremonial child flows that have no meaningful transition graph.
 
 Default refactoring behavior:
-- When refactoring an existing large flow, first identify screen-level steps versus localized interaction loops.
-- Preserve the parent screen step when possible, and extract dense sub-sequences into child flows rendered by the parent view.
-- Favor extracting child flows when a single step list starts encoding form editing, async save/delete states, confirmations, retries, and panel/modal-local logic in one place.
+- When refactoring an existing large flow, identify screen-level transitions versus localized interaction loops.
+- Extract a child flow only when the localized interaction itself has meaningful phases, branching, async sequencing, retries/errors, or independent lifecycle/state ownership.
+- Keep simple local interactions as ordinary React inside the parent view.
 
 Heuristic:
-- If an intent changes the whole screen mode, it usually belongs in the parent flow.
-- If an intent belongs to a local region of the UI and has its own loading/error/confirmation states, it usually belongs in a child flow.
+- If an intent changes a meaningful screen/journey mode, it is a strong flow candidate.
+- If an intent belongs to a local region and has its own meaningful loading/error/confirmation/continuation sequence, it may be a child flow.
+- If an intent is just local component state, keep it local.
 
 ## 9) Cross-flow communication via channels (Mandatory)
 
 Goal:
-- Coordinate state/events between flows without prop drilling or global stores.
+- Coordinate state/events between independent flows without prop drilling or global stores.
 
 Rules:
-- Use channels whenever multiple flows need to coordinate or share state/events.
+- Use channels only when multiple flows genuinely need to coordinate or share reactive state/events.
 - The parent component owns channel instances and passes them via `eventChannels`.
 - Child flows access channels via `events?.channelName.get()` and emit via `events?.channelName.emit(...)`.
 - Default to `eventChannelsStrategy="sticky"` unless replacement semantics are explicitly required.
@@ -190,7 +184,8 @@ Rules:
 Nested flow composition pattern:
 - Parent view components may render child `FlowRunner` instances directly.
 - Pass only the child flow's required `initialData`; do not mirror the entire parent flow state into every child by default.
-- Use channels for cross-flow coordination such as list refresh, selected item updates, counters, or shared derived state.
+- Use channels for real cross-flow coordination such as list refresh, selected item updates, counters, or shared derived state.
+- Prefer direct props/handlers when the communication is ordinary component composition rather than flow-to-flow coordination.
 
 ## 10) Output typing pattern
 
@@ -272,6 +267,7 @@ export const flow = defineFlow<DomainData, InternalData>(
 - Add `"use client"` to UI step view files.
 - `FlowRunner` usage belongs in client components.
 - Server actions can be called inside action steps, as in flashcards.
+- Do not move a Server Component or otherwise server-renderable route into a UIFlow client boundary unless the interaction actually qualifies for UIFlow.
 
 ## 13) Common mistakes to reject
 
@@ -286,16 +282,17 @@ export const flow = defineFlow<DomainData, InternalData>(
 9. Introducing extra orchestration layers (event buses/channels/wrappers) when a direct local handler is sufficient.
 10. Using static string values in `channelTransitions` (must be resolver functions).
 11. Assuming action steps auto-render a loading placeholder by default.
+12. Wrapping simple local React state in UIFlow without a meaningful transition/sequence problem.
 
 ## 14) Generation checklist for agents
 
-When asked to implement a new flow, produce:
+When UIFlow is warranted and the agent is asked to implement a new flow, produce:
 
 1. Typed flow data model.
 2. Typed output unions for each UI step.
 3. `defineFlow(...)` with valid `start` and valid transition targets.
 4. UI step components with `{ input, output }` contract.
-5. `FlowRunner` entry component with stable `eventChannels` (if channels are needed).
+5. `FlowRunner` entry component with stable `eventChannels` only if channels are needed.
 6. No placeholders, no pseudocode, and no internal-path imports.
 7. No no-op transitions: each emitted output must either update rendered UI, update meaningful state, or trigger a required side-effect represented in state.
 
@@ -304,27 +301,39 @@ No-domain-input pattern:
 
 ## 15) Minimum quality bar
 
-Generated code must:
+Generated UIFlow code must:
 - compile in TypeScript
 - keep flow logic centralized in step definitions
 - keep view components declarative and dumb
 - avoid runtime channel/reference pitfalls described above
+- be simpler or clearer than the equivalent plain React control flow it replaces
 
-## 16) Default Policy (Mandatory)
+## 16) Applicability Policy (Mandatory)
 
-For all new route or feature logic, code agents MUST use UIFlow as the default implementation model, regardless of UI or logic complexity.
+UIFlow is the default orchestration model for React/Next.js interactions that have a meaningful control-flow problem. It is not mandatory for every route, feature, component, form, or event handler.
 
-Required baseline for new implementations:
-- define flow logic with `defineFlow(...)`
-- render via `FlowRunner`
-- keep user intent in typed `output.emit(...)` events from UI step views
-- keep transitions and side effects in flow steps
+Use UIFlow when at least one material orchestration need exists:
+- multiple meaningful phases or named UI modes form a journey
+- user intent branches into different next states
+- async work participates in visible loading, retry, error, success, or continuation sequencing
+- several transitions share mutable journey state and would otherwise be scattered across handlers/effects
+- independent child/sibling flows require explicit coordination
+- local `useState`/`useEffect` control flow is becoming difficult to understand because behavior is distributed
 
-Allowed exceptions (only):
-- the user explicitly requests a non-UIFlow implementation for the task
-- the task is a narrowly scoped edit to existing non-UIFlow code where migration is out of scope for that request
+Prefer plain React/Next.js when behavior is local and direct:
+- static or server-rendered content with no client journey
+- simple field/input state
+- open/close, selected tab, accordion, hover, disclosure, or similar isolated UI state
+- direct click/navigation/side-effect handlers with no meaningful state sequence
+- simple forms whose existing framework/local submit/pending/error model is already clear
+- straightforward data display/fetching without meaningful client-side orchestration
+- any case where named steps and `FlowRunner` merely rename simple state instead of clarifying behavior
 
-If an exception is used, the agent must state the reason explicitly in its response.
+Decision test before introducing UIFlow:
+- If plain React/Next.js is shorter and equally explicit, do not use UIFlow.
+- If named states/transitions materially clarify sequencing, branching, side effects, or coordination, use UIFlow.
+
+Existing non-UIFlow code does not need migration merely because UIFlow is installed. Migrate when the requested work exposes an orchestration problem UIFlow would materially simplify, or when the user explicitly requests migration.
 
 ## 17) Render Discipline (Mandatory)
 
@@ -349,12 +358,14 @@ Goal:
 - Use UIFlow to simplify control flow, not to add abstraction overhead.
 
 Rules:
+- First decide whether UIFlow itself is warranted using Section 16.
 - Prefer the smallest implementation that satisfies requirements and remains readable.
-- Do not add channels, event buses, or helper layers unless there is a concrete need (cross-flow coordination, shared subscriptions, replacement semantics, or lifecycle ownership requirements).
+- Do not add channels, event buses, child flows, or helper layers unless there is a concrete need.
 - Keep action/UI flags localized inside flow internal state (prefer step-scoped `ui` state such as `internal.ui.<stepName>.*`) rather than extending `FlowRunner` with app-specific flags/messages.
 - Do not require callers to pass step UI flags/messages via `FlowRunner.initialData`; define defaults in `defineFlow` using `createInternalData()`, then maintain flags through step logic.
-- If a local UI handler can perform a non-stateful side effect safely, prefer that over extra orchestration.
+- If a local UI handler can perform a simple interaction safely and clearly, prefer that over extra orchestration.
 - Reuse established simple patterns already present in the codebase unless there is a documented reason to diverge.
 
-Decision test:
-- If removing an added layer keeps behavior and clarity the same or better, that layer should not exist.
+Decision tests:
+- If removing UIFlow entirely keeps behavior equally clear with less code, UIFlow should not be used.
+- Once UIFlow is justified, if removing an added channel, child flow, wrapper, helper, or step keeps behavior and clarity the same or better, that added layer should not exist.
