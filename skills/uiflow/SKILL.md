@@ -1,73 +1,41 @@
 ---
 name: uiflow
-description: Use when creating, refactoring, or reviewing React UI flows with @myriadcodelabs/uiflow. Applies to FlowRunner, defineFlow, createFlowChannel, step transitions, action steps, parent/child flow composition, and channel coordination.
+description: Build React and Next.js user journeys with @myriadcodelabs/uiflow. Use when creating, changing, reviewing, or testing UIFlow flows, FlowRunner usage, UI/action steps, channels, flow-owned state, parent/child flow composition, or Next.js client/server integration.
 ---
 
-# UIFlow Skill
+# UIFlow
 
-Use `@myriadcodelabs/uiflow` as the default model for new React route or feature logic unless the user explicitly asks for another approach or the task is a narrow edit to existing non-UIFlow code.
+Use UIFlow as the default orchestration model for new React/Next.js route or feature logic unless the user explicitly requests a non-UIFlow implementation or the task is a narrow edit to existing non-UIFlow code where migration is out of scope.
 
-## Core Rules
+UIFlow owns control-flow orchestration. Keep visual component composition/styling, project directory architecture, and backend/domain rules in their respective project skills.
 
-- Import only from package root:
+Load only the reference needed for the current concern:
 
-```ts
-import { FlowRunner, defineFlow, createFlowChannel, type OutputHandle } from "@myriadcodelabs/uiflow";
-```
+- For public API, step signatures, domain/internal state, transition semantics, action rendering, channels, and runtime behavior, read [core API and runtime](references/core-api-and-runtime.md).
+- For flow boundaries, parent/child composition, UI/action separation, outputs, state ownership, channels, render discipline, and simplicity rules, read [flow design](references/flow-design.md).
+- For Next.js App Router, client boundaries, server-provided initial data, Server Actions, and placement with a thin route layer, read [Next.js integration](references/nextjs-integration.md).
+- For implementing or reviewing tests around flows, transitions, actions, channels, and render policies, read [testing](references/testing.md).
 
-- Define flow logic with `defineFlow(...)`.
-- Render flows with `FlowRunner`.
-- Keep user intent in typed `output.emit(...)` events from UI step views.
-- Keep transitions and side effects in step definitions.
-- `start` must exist in the steps map.
-- Every intended transition target must be a valid step key.
-- Do not mix `view` and `action` in one step.
-- UI step views accept `{ input, output }`.
-- UI step views must not transition directly.
-- Prefer discriminated output unions over broad `any`.
+## Core policy
 
-## Step Types
+- Import only from `@myriadcodelabs/uiflow`; never import package internals or `dist/*`.
+- Define flows with `defineFlow<DomainData, InternalData>(...)` when the flow owns internal state.
+- `DomainData` is caller-provided data supplied through `FlowRunner.initialData`.
+- `InternalData` is flow-owned state initialized with `createInternalData()`.
+- UI steps use `input + view + onOutput`.
+- Action steps use `input + action + onOutput` and may define `render`.
+- Never combine `view` and `action` in one step.
+- Views render from `input` and emit typed user intent with `output.emit(...)`; they do not choose transitions.
+- Keep transitions in `onOutput` and asynchronous flow work in action steps.
+- Mutating domain/internal flow data inside step handlers is supported and intentional.
+- Every intended transition must name an existing step.
+- Use discriminated unions for UI outputs; avoid `any` in application flow code.
+- Use channels only when independent flows genuinely need shared reactive state/events. Keep channel instances stable.
+- Prefer small cohesive flows. Split unrelated responsibilities instead of building mega-flows; parent flows may render child `FlowRunner` instances for localized workflows.
+- Do not introduce an output/transition merely to re-render identical UI or perform a side effect that needs no flow-state/UI change.
 
-- UI step: `input`, `view`, `onOutput`.
-- Action step: `input`, `action`, `onOutput`, optional `render`.
-- Action steps run automatically when current.
-- `onOutput` may be sync or async.
-- Returning a step name transitions. Returning `void` stays on current step and re-renders.
-- Unknown step names are ignored by `FlowRunner`, so generate only valid targets.
+## Source authority
 
-## Data
+When working on this library repository itself, current `src/flow.tsx` and tests under `test/flow-runner/` are authoritative for runtime behavior. `code_generation_guidelines/uiflow_llm_guidelines.md` is the canonical generation policy. Do not infer current behavior from stale examples when source/tests disagree.
 
-- `initialData` is shallow-copied once into domain data.
-- Use `createInternalData()` for flow-owned mutable defaults.
-- Mutate domain/internal data inside step logic, not inside view components.
-- If a flow has no caller-provided domain input, use `type DomainData = {}` and pass `initialData={{}}`.
-
-## Channels
-
-- Use `createFlowChannel<T>(initial)` for coordination between independent flows.
-- Parent components own channel instances and pass them via `eventChannels`.
-- Keep channel instances stable with module scope, `useRef`, or `useMemo`.
-- Guard access with optional chaining: `events?.channelName`.
-- Default to `eventChannelsStrategy="sticky"`.
-- Use `"replace"` only when channel replacement semantics are required.
-- `channelTransitions` values must be resolver functions, not static strings.
-
-## Composition
-
-- A flow should model one user journey or cohesive task.
-- Split flows when steps belong to different domain ownership, UI is reused, flow exceeds about 6-8 steps, or distinct modes rarely share state.
-- Prefer parent/child composition when one screen has dense local interactions.
-- Parent flow owns screen-level navigation, selection, layout mode, and shared feature state.
-- Child flows own localized editing, creating, confirming, saving, deleting, retrying, modal, or panel workflows.
-- Parent view components may render child `FlowRunner` instances directly.
-- Use channels for cross-flow coordination such as refreshes, selection updates, counters, or shared derived state.
-
-## Render Discipline
-
-- Do not route simple side-effect-only clicks through flow outputs when no UI/state change is needed.
-- Use flow outputs and action steps when loading, disabled, error, success, navigation, rendered data, or shared state must change.
-- Avoid event buses, helper layers, or channels unless there is a concrete cross-flow or lifecycle need.
-
-## Reference
-
-If present, also read `code_generation_guidelines/uiflow_llm_guidelines.md` in the target project. It is the expanded canonical guide for generated UIFlow code.
+When using the published package in another application, use the installed package version and its bundled UIFlow guidelines as authority rather than assuming this repository's newest source matches that installed version.
