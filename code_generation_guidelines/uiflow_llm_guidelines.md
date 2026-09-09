@@ -153,10 +153,28 @@ Rules:
 - Split flows when steps belong to different domain ownership or invariants.
 - Split flows when UI is reused across routes or features.
 - Split flows when the flow exceeds ~6–8 steps or contains distinct modes that rarely share state.
-- Prefer parent/child composition when a sub-UI becomes stateful.
-- Parent flow orchestrates higher-level navigation/sequence.
-- Child flow owns localized UI state and action sequencing.
+- Default to parent/child composition when one visible UI contains many moving parts, many intents, or dense local interaction states.
+- Parent flow should keep a stable screen-level or region-level step and render child `FlowRunner` instances inside that parent view component when localized workflows become dense.
+- Parent flow orchestrates higher-level navigation, selection, layout mode, and shared feature state.
+- Child flow owns localized UI state and action sequencing such as editing, creating, confirming, saving, deleting, retrying, or modal/panel-local interactions.
+- When multiple intents belong to the same overall screen but not the same local interaction loop, do not flatten them into one mega-flow by default; split them into child flows rendered inside the parent UI.
+- Nested `FlowRunner` usage inside a parent step's React component is a preferred composition pattern, not an edge case.
+- Prefer child flows over ad hoc partial UI injection. Use partial/shell composition only for layout slots or stable chrome around child flows.
 - Avoid “mega-flows” that mix unrelated responsibilities; splitting is preferred over adding more steps.
+
+Default code generation behavior:
+- When generating new UIFlow code for a feature with one cohesive screen and several sub-intents, create a parent flow plus child flows by default instead of a single flat flow.
+- Keep the parent step visually cohesive. The parent view may render list/detail panes, forms, panels, or modals, and may host child `FlowRunner` instances inside those regions.
+- Only keep all intents in one flow when the interactions truly share one small local state machine and remain readable.
+
+Default refactoring behavior:
+- When refactoring an existing large flow, first identify screen-level steps versus localized interaction loops.
+- Preserve the parent screen step when possible, and extract dense sub-sequences into child flows rendered by the parent view.
+- Favor extracting child flows when a single step list starts encoding form editing, async save/delete states, confirmations, retries, and panel/modal-local logic in one place.
+
+Heuristic:
+- If an intent changes the whole screen mode, it usually belongs in the parent flow.
+- If an intent belongs to a local region of the UI and has its own loading/error/confirmation states, it usually belongs in a child flow.
 
 ## 9) Cross-flow communication via channels (Mandatory)
 
@@ -168,6 +186,11 @@ Rules:
 - The parent component owns channel instances and passes them via `eventChannels`.
 - Child flows access channels via `events?.channelName.get()` and emit via `events?.channelName.emit(...)`.
 - Default to `eventChannelsStrategy="sticky"` unless replacement semantics are explicitly required.
+
+Nested flow composition pattern:
+- Parent view components may render child `FlowRunner` instances directly.
+- Pass only the child flow's required `initialData`; do not mirror the entire parent flow state into every child by default.
+- Use channels for cross-flow coordination such as list refresh, selected item updates, counters, or shared derived state.
 
 ## 10) Output typing pattern
 

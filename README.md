@@ -35,12 +35,14 @@ npm i @myriadcodelabs/uiflow
 yarn add @myriadcodelabs/uiflow
 ```
 
-LLM guidelines helper:
+Agent guidance helper:
 - UIFlow attempts to copy `code_generation_guidelines/uiflow_llm_guidelines.md` into your project on install.
+- UIFlow also attempts to install local skill files at `.codex/skills/uiflow/SKILL.md` and `.agents/skills/uiflow/SKILL.md` for agents that read project-local skills.
+- A package install cannot force every coding agent or environment to load skills automatically. It can only place files where supported agents commonly discover them.
 - If install scripts are disabled in your environment, run:
 
 ```bash
-npx @myriadcodelabs/uiflow install-guidelines
+npx @myriadcodelabs/uiflow install-agent-assets
 ```
 
 ## Imports
