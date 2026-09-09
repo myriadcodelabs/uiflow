@@ -1,6 +1,36 @@
 # UIFlow Design Rules
 
-UIFlow should simplify a user journey by making states, transitions, and side effects explicit. Do not turn it into an additional abstraction layer around ordinary local React code.
+UIFlow should simplify a user journey by making meaningful states, transitions, and side effects explicit. Do not turn it into an additional abstraction layer around ordinary local React code.
+
+## Applicability first
+
+Before designing a flow, decide whether the interaction actually needs orchestration.
+
+Use UIFlow when at least one material orchestration need exists:
+
+- multiple meaningful UI phases or modes form a journey;
+- user intent branches into different next states;
+- asynchronous work participates in visible loading, retry, error, success, or continuation sequencing;
+- several transitions share mutable journey state and would otherwise be scattered across handlers/effects;
+- independent flows need explicit coordination;
+- local `useState`/`useEffect` control flow is becoming difficult to understand because behavior is spread across components or effects.
+
+Prefer plain React/Next.js when the behavior is naturally local and direct:
+
+- static/server-rendered content;
+- local field/input state;
+- opening/closing a dialog or disclosure;
+- selected tab/accordion state;
+- a direct navigation or click handler;
+- a simple form whose local/framework form state already expresses submit/pending/error clearly;
+- straightforward data display/fetching with no client-side journey;
+- any case where a `FlowRunner` plus named steps adds ceremony without making control flow clearer.
+
+Decision test:
+
+> If plain React/Next.js is shorter and equally explicit about the behavior, do not use UIFlow.
+
+Use UIFlow when naming states and transitions makes sequencing, branching, side effects, or coordination materially easier to reason about.
 
 ## One cohesive journey per flow
 
@@ -13,9 +43,9 @@ Split when:
 - the flow contains distinct modes that rarely share state;
 - the flow grows beyond roughly 6–8 meaningful steps and a cohesive child flow can be named.
 
-Prefer parent/child flow composition to a mega-flow. The parent owns high-level orchestration; the child owns localized state and sequencing.
+Prefer parent/child flow composition to a mega-flow when both parent and child have genuine orchestration responsibilities. Do not create child flows merely to break ordinary component state into more files.
 
-A parent UI step view may render a child `FlowRunner` directly when that child represents a cohesive localized workflow such as editing, creating, confirming, saving, deleting, retrying, modal, or panel behavior. Use channels only when parent/child or sibling flows need explicit cross-flow coordination.
+A parent UI step view may render a child `FlowRunner` directly when that child represents a cohesive localized workflow such as a multi-state edit/save/retry sequence, creation wizard, confirmation sequence, or independently orchestrated panel/modal. Use channels only when parent/child or sibling flows need explicit cross-flow coordination.
 
 ## UI step discipline
 
@@ -137,11 +167,8 @@ Do not assume a loading state appears automatically.
 
 Prefer the smallest implementation that keeps the journey understandable.
 
-If removing a channel, wrapper, helper layer, or step leaves behavior and clarity unchanged or improved, remove it.
+If removing UIFlow entirely leaves the behavior just as explicit and easier to maintain, plain React/Next.js is the correct implementation.
 
-For new route/feature orchestration, UIFlow remains the default. Exceptions are limited to:
+If UIFlow is warranted, then keep the flow itself minimal: if removing a channel, wrapper, helper layer, child flow, or step leaves behavior and clarity unchanged or improved, remove it.
 
-- explicit user request for non-UIFlow implementation;
-- narrowly scoped edits to existing non-UIFlow code where migration is outside the request.
-
-When using an exception, state the reason in the completion report.
+UIFlow is the default orchestration model for qualifying journeys, not a mandatory wrapper around all new feature code. Existing non-UIFlow code does not require migration unless the requested change exposes an orchestration problem that UIFlow would materially simplify or the user explicitly asks for migration.
